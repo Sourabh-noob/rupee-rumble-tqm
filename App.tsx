@@ -7,7 +7,7 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
-import { Loader, Lock, Hourglass } from 'lucide-react';
+import { Loader, Hourglass } from 'lucide-react';
 
 const MAX_ROUNDS = 5;
 
@@ -193,14 +193,6 @@ const App: React.FC = () => {
                             <div className="text-xs text-slate-400 uppercase tracking-widest">Current NAV</div>
                             <div className="text-2xl font-mono font-bold text-yellow-400">₹{team?.balance}</div>
                         </div>
-                        {/* Admin Shortcut for in-game control */}
-                        <button 
-                            onClick={handleAdminLogin}
-                            className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 text-slate-400 transition-colors"
-                            title="Admin Controls"
-                        >
-                            <Lock size={14} />
-                        </button>
                     </div>
                 </div>
             </header>
