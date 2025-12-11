@@ -7,7 +7,7 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
-import { Loader, Lock } from 'lucide-react';
+import { Loader, Lock, Hourglass } from 'lucide-react';
 
 const MAX_ROUNDS = 5;
 
@@ -207,12 +207,15 @@ const App: React.FC = () => {
                             )}
                             
                             {!isTimerActive && !isTimerFinished && !currentAllocations && (
-                                <button 
-                                    onClick={startRoundTimer}
-                                    className="bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 px-8 rounded-full shadow-lg shadow-yellow-900/20 text-lg transition-all transform hover:scale-105"
-                                >
-                                    START TIMER
-                                </button>
+                                <div className="flex flex-col items-center justify-center p-8 bg-slate-800/30 rounded-2xl border border-slate-700/50 backdrop-blur-sm animate-pulse">
+                                    <Hourglass className="w-8 h-8 text-yellow-500 mb-3" />
+                                    <h3 className="text-xl font-display font-bold text-yellow-500 tracking-widest uppercase mb-1">
+                                        Market Opening Soon
+                                    </h3>
+                                    <p className="text-slate-400 text-sm font-mono">
+                                        Waiting for Game Master to start...
+                                    </p>
+                                </div>
                             )}
 
                             {(isTimerActive || isTimerFinished) && (
