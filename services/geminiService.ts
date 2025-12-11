@@ -2,9 +2,24 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Question, ImageSize } from "../types";
 
 // Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// We handle the case where the API key is missing gracefully
+const apiKey = process.env.API_KEY;
+let ai: GoogleGenAI | null = null;
+
+if (apiKey && apiKey.length > 0) {
+  try {
+    ai = new GoogleGenAI({ apiKey });
+  } catch (e) {
+    console.error("Failed to initialize Gemini client", e);
+  }
+}
 
 export const generateTeamLogo = async (teamName: string, size: ImageSize): Promise<string> => {
+  // If no API key or client, return placeholder immediately
+  if (!ai) {
+    return `https://picsum.photos/500/500?grayscale&blur=2`;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-pro-image-preview',
@@ -39,6 +54,12 @@ export const generateTeamLogo = async (teamName: string, size: ImageSize): Promi
 };
 
 export const generateGameQuestions = async (): Promise<Question[]> => {
+  // If no API key or client, return fallback questions immediately
+  if (!ai) {
+    console.warn("Using fallback questions (No API Key provided)");
+    return fallbackQuestions;
+  }
+
   try {
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash-lite", // Low latency model
