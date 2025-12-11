@@ -16,10 +16,15 @@ const App: React.FC = () => {
   const [team, setTeam] = useState<Team | null>(null);
   const [roundIndex, setRoundIndex] = useState(0);
   const [questions, setQuestions] = useState<Question[]>([]);
+  
+  // Lifted state for allocations to handle auto-submission
+  const [draftAllocations, setDraftAllocations] = useState<Allocations>({ A: 0, B: 0, C: 0, D: 0 });
+  const [hasSubmitted, setHasSubmitted] = useState(false);
   const [currentAllocations, setCurrentAllocations] = useState<Allocations | null>(null);
+
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isTimerFinished, setIsTimerFinished] = useState(false);
-  const [timerDuration, setTimerDuration] = useState(60);
+  const [timerDuration, setTimerDuration] = useState(40); // Default to 40 seconds
 
   // Initialize questions on load
   useEffect(() => {
@@ -28,6 +33,16 @@ const App: React.FC = () => {
     }
   }, []);
 
+  // Auto-start timer when entering PLAYING state
+  useEffect(() => {
+    if (gameState === GameState.PLAYING) {
+        setIsTimerActive(true);
+        setIsTimerFinished(false);
+        setHasSubmitted(false);
+        setDraftAllocations({ A: 0, B: 0, C: 0, D: 0 }); // Reset board
+    }
+  }, [gameState]);
+
   const handleJoin = (newTeam: Team) => {
     setTeam(newTeam);
     setGameState(GameState.LOADING_QUESTIONS);
@@ -35,6 +50,8 @@ const App: React.FC = () => {
   };
 
   const handleAdminLogin = () => {
+    // Pause timer logic if needed, but for now just switch view
+    setIsTimerActive(false);
     setGameState(GameState.ADMIN_DASHBOARD);
   };
 
@@ -52,15 +69,26 @@ const App: React.FC = () => {
   const resetRoundTimer = () => {
     setIsTimerActive(false);
     setIsTimerFinished(false);
+    setHasSubmitted(false);
+    setDraftAllocations({ A: 0, B: 0, C: 0, D: 0 });
   };
 
+  // Called when manual submit button is pressed
+  const handleManualSubmit = () => {
+    setHasSubmitted(true);
+    // We do NOT transition state yet. We wait for the timer.
+  };
+
+  // Called when Timer hits 0
   const handleTimeUp = () => {
     setIsTimerActive(false);
     setIsTimerFinished(true);
+    
+    // Auto-submit the current draft allocations
+    finalizeRound(draftAllocations);
   };
 
-  const submitAllocations = (allocations: Allocations) => {
-    setIsTimerActive(false);
+  const finalizeRound = (allocations: Allocations) => {
     setCurrentAllocations(allocations);
     
     if (!team || !questions[roundIndex]) return;
@@ -93,7 +121,7 @@ const App: React.FC = () => {
     } else {
         setRoundIndex(prev => prev + 1);
         setCurrentAllocations(null);
-        resetRoundTimer();
+        // Resetting these will be handled by the useEffect on GameState.PLAYING
         setGameState(GameState.PLAYING);
     }
   };
@@ -189,57 +217,25 @@ const App: React.FC = () => {
                             <h2 className="text-2xl md:text-4xl font-display font-bold leading-tight">
                                 {currentQuestion.text}
                             </h2>
-
-                            {/* Options Preview - Visible before timer starts */}
-                            {!isTimerActive && !isTimerFinished && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto my-8">
-                                    {(['A', 'B', 'C', 'D'] as const).map(opt => (
-                                        <div key={opt} className="bg-slate-800 border border-slate-700 p-4 rounded-xl flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-slate-900 border border-slate-600 flex items-center justify-center font-bold font-display text-white shrink-0">
-                                                {opt}
-                                            </div>
-                                            <div className="text-left text-slate-300 font-medium">
-                                                {currentQuestion.options[opt]}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                             
-                            {!isTimerActive && !isTimerFinished && !currentAllocations && (
-                                <div className="flex flex-col items-center justify-center p-8 bg-slate-800/30 rounded-2xl border border-slate-700/50 backdrop-blur-sm animate-pulse">
-                                    <Hourglass className="w-8 h-8 text-yellow-500 mb-3" />
-                                    <h3 className="text-xl font-display font-bold text-yellow-500 tracking-widest uppercase mb-1">
-                                        Market Opening Soon
-                                    </h3>
-                                    <p className="text-slate-400 text-sm font-mono">
-                                        Waiting for Game Master to start...
-                                    </p>
-                                </div>
-                            )}
-
-                            {(isTimerActive || isTimerFinished) && (
-                                <Timer 
-                                    duration={timerDuration} 
-                                    isActive={isTimerActive} 
-                                    onTimeUp={handleTimeUp} 
-                                />
-                            )}
-                            
-                            {isTimerFinished && !currentAllocations && (
-                                <div className="text-red-400 font-bold animate-pulse">TIME'S UP! SUBMIT NOW!</div>
-                            )}
+                            {/* We now show the timer immediately in PLAYING state */}
+                            <Timer 
+                                duration={timerDuration} 
+                                isActive={isTimerActive} 
+                                onTimeUp={handleTimeUp} 
+                            />
                         </div>
 
                         {/* Allocation Board */}
-                        {(isTimerActive || isTimerFinished) && (
-                            <AllocationBoard 
-                                balance={team?.balance || 0}
-                                question={currentQuestion}
-                                isTimerActive={true} 
-                                onConfirm={submitAllocations}
-                            />
-                        )}
+                        <AllocationBoard 
+                            balance={team?.balance || 0}
+                            question={currentQuestion}
+                            allocations={draftAllocations}
+                            setAllocations={setDraftAllocations}
+                            isTimerActive={isTimerActive}
+                            hasSubmitted={hasSubmitted}
+                            onManualSubmit={handleManualSubmit}
+                        />
                     </div>
                 )}
 

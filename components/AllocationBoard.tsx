@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { Allocations, Question } from '../types';
-import { DollarSign, Trash2, PieChart, Layers, AlertCircle } from 'lucide-react';
+import { DollarSign, Trash2, PieChart, Layers, AlertCircle, Lock } from 'lucide-react';
 
 interface AllocationBoardProps {
   balance: number;
   question: Question;
+  allocations: Allocations;
+  setAllocations: (a: Allocations) => void;
   isTimerActive: boolean;
-  onConfirm: (allocations: Allocations) => void;
+  hasSubmitted: boolean;
+  onManualSubmit: () => void;
 }
 
 const AllocationBoard: React.FC<AllocationBoardProps> = ({
   balance,
   question,
+  allocations,
+  setAllocations,
   isTimerActive,
-  onConfirm,
+  hasSubmitted,
+  onManualSubmit,
 }) => {
-  const [allocations, setAllocations] = useState<Allocations>({ A: 0, B: 0, C: 0, D: 0 });
   const [allocatedTotal, setAllocatedTotal] = useState(0);
 
   // Recalculate total whenever individual allocations change
@@ -25,6 +30,8 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
   }, [allocations]);
 
   const updateAllocation = (option: keyof Allocations, value: number) => {
+    if (hasSubmitted) return;
+    
     // Clamp value between 0 and balance
     let newValue = Math.max(0, Math.min(balance, value));
     
@@ -37,10 +44,11 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
         newValue = balance - otherSum;
     }
 
-    setAllocations((prev) => ({ ...prev, [option]: newValue }));
+    setAllocations({ ...allocations, [option]: newValue });
   };
 
   const handleAllIn = (option: keyof Allocations) => {
+    if (hasSubmitted) return;
     setAllocations({
       A: option === 'A' ? balance : 0,
       B: option === 'B' ? balance : 0,
@@ -50,10 +58,12 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
   };
 
   const handleReset = () => {
+    if (hasSubmitted) return;
     setAllocations({ A: 0, B: 0, C: 0, D: 0 });
   };
 
   const handleSplitEvenly = () => {
+    if (hasSubmitted) return;
     const totalNotes = Math.floor(balance / 100);
     const baseNotes = Math.floor(totalNotes / 4);
     let remainder = totalNotes % 4;
@@ -71,12 +81,12 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
   };
   
   const handle5050 = (opt1: keyof Allocations, opt2: keyof Allocations) => {
+      if (hasSubmitted) return;
       const totalNotes = Math.floor(balance / 100);
       const notesPerOption = Math.floor(totalNotes / 2);
       const remainder = totalNotes % 2;
 
       const newAlloc: Allocations = { A: 0, B: 0, C: 0, D: 0 };
-      // Distribute remainder note to the first option to ensure total usage
       newAlloc[opt1] = (notesPerOption + remainder) * 100;
       newAlloc[opt2] = notesPerOption * 100;
       setAllocations(newAlloc);
@@ -86,6 +96,9 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
   const isComplete = allocatedTotal === balance;
   const isMultipleOf100 = Object.values(allocations).every(val => val % 100 === 0);
   const isValid = isComplete && isMultipleOf100;
+  
+  // Interaction disabled if timer stopped OR if already submitted
+  const isLocked = !isTimerActive || hasSubmitted;
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
@@ -93,48 +106,54 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
       <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex flex-col md:flex-row justify-between items-center sticky top-0 z-10 shadow-xl">
         <div className="text-slate-400 font-mono text-sm uppercase tracking-widest">Allocation Status</div>
         
-        {!isMultipleOf100 && (
+        {!isMultipleOf100 && !isLocked && (
             <div className="text-red-400 text-sm font-bold flex items-center gap-2 animate-pulse">
                 <AlertCircle size={16} /> Use denominations of ₹100
             </div>
         )}
 
-        <div className="flex items-center gap-4 mt-2 md:mt-0">
-            <div className={`font-mono font-bold text-xl ${remaining > 0 ? 'text-yellow-400' : isValid ? 'text-green-400' : 'text-red-400'}`}>
-                {remaining > 0 ? `To Allocate: ₹${remaining}` : isValid ? 'Fully Allocated!' : 'Invalid Allocation'}
+        {hasSubmitted ? (
+            <div className="flex items-center gap-2 text-yellow-500 font-bold animate-pulse">
+                <Lock size={16} /> BET PLACED. WAITING FOR MARKET CLOSE...
             </div>
-            <button
-                onClick={() => onConfirm(allocations)}
-                disabled={!isValid || !isTimerActive}
-                className={`px-6 py-2 rounded-lg font-bold transition-all ${
-                    isValid && isTimerActive
-                    ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105'
-                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                }`}
-            >
-                SUBMIT BET
-            </button>
-        </div>
+        ) : (
+            <div className="flex items-center gap-4 mt-2 md:mt-0">
+                <div className={`font-mono font-bold text-xl ${remaining > 0 ? 'text-yellow-400' : isValid ? 'text-green-400' : 'text-red-400'}`}>
+                    {remaining > 0 ? `To Allocate: ₹${remaining}` : isValid ? 'Fully Allocated!' : 'Invalid Allocation'}
+                </div>
+                <button
+                    onClick={onManualSubmit}
+                    disabled={!isValid || isLocked}
+                    className={`px-6 py-2 rounded-lg font-bold transition-all ${
+                        isValid && !isLocked
+                        ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105'
+                        : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                    }`}
+                >
+                    SUBMIT BET
+                </button>
+            </div>
+        )}
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-         <button onClick={handleSplitEvenly} disabled={!isTimerActive} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
+      <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
+         <button onClick={handleSplitEvenly} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
             <PieChart size={16} /> Spread (Even)
          </button>
-         <button onClick={handleReset} disabled={!isTimerActive} className="flex items-center justify-center gap-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 p-2 rounded border border-red-900/30 transition-colors text-sm">
+         <button onClick={handleReset} className="flex items-center justify-center gap-2 bg-red-900/30 hover:bg-red-900/50 text-red-400 p-2 rounded border border-red-900/30 transition-colors text-sm">
             <Trash2 size={16} /> Reset
          </button>
-         <button onClick={() => handle5050('A', 'B')} disabled={!isTimerActive} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
+         <button onClick={() => handle5050('A', 'B')} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
             <Layers size={16} /> 50/50 (A & B)
          </button>
-         <button onClick={() => handle5050('C', 'D')} disabled={!isTimerActive} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
+         <button onClick={() => handle5050('C', 'D')} className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 p-2 rounded border border-slate-700 transition-colors text-sm text-slate-300">
             <Layers size={16} /> 50/50 (C & D)
          </button>
       </div>
 
       {/* Allocation Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 ${hasSubmitted ? 'opacity-90 grayscale-[30%]' : ''}`}>
         {(['A', 'B', 'C', 'D'] as const).map((option) => (
           <div 
             key={option} 
@@ -163,14 +182,14 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className={`space-y-4 ${isLocked ? 'pointer-events-none' : ''}`}>
                 <input
                     type="range"
                     min="0"
                     max={balance}
                     step="100"
                     value={allocations[option]}
-                    disabled={!isTimerActive}
+                    disabled={isLocked}
                     onChange={(e) => updateAllocation(option, parseInt(e.target.value))}
                     className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                 />
@@ -178,8 +197,8 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                 <div className="flex gap-2">
                     <button 
                         onClick={() => handleAllIn(option)}
-                        disabled={!isTimerActive}
-                        className="flex-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-bold py-1 px-2 rounded uppercase tracking-wider transition-colors"
+                        disabled={isLocked}
+                        className="flex-1 bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-bold py-1 px-2 rounded uppercase tracking-wider transition-colors disabled:opacity-50"
                     >
                         All In
                     </button>
@@ -191,14 +210,14 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                             min="0"
                             max={balance}
                             value={allocations[option]}
-                            disabled={!isTimerActive}
+                            disabled={isLocked}
                             onChange={(e) => {
                                 const val = parseInt(e.target.value);
                                 if (!isNaN(val)) {
                                     updateAllocation(option, val);
                                 }
                             }}
-                            className="w-20 bg-transparent text-right font-mono text-sm focus:outline-none p-1 text-white"
+                            className="w-20 bg-transparent text-right font-mono text-sm focus:outline-none p-1 text-white disabled:text-slate-500"
                         />
                     </div>
                 </div>
@@ -209,6 +228,10 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                 <div className="absolute top-2 right-2 opacity-10 pointer-events-none">
                     <DollarSign size={64} />
                 </div>
+            )}
+            
+            {hasSubmitted && (
+                 <div className="absolute inset-0 bg-slate-900/10 z-10 rounded-2xl cursor-not-allowed"></div>
             )}
           </div>
         ))}
