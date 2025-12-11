@@ -2,7 +2,7 @@
 
 Rupee Rumble is an interactive event web app focused on delivering a fast, accessible, and delightful participant experience. Built with TypeScript (≈97%) and minimal HTML, this project emphasizes strong typing, maintainability, and a smooth developer workflow.
 
-Live demo: (add demo URL here)  
+Live demo: https://tqm-rupee-rumble.vercel.app/
 Repository: https://github.com/Sourabh-noob/rupee-rumble-tqm
 
 ---
@@ -50,10 +50,7 @@ Use cases:
 - Language: TypeScript
 - Markup: HTML (minimal static assets)
 - Build tools / scripts: Node, npm / pnpm (configurable)
-- Testing: (add test framework used, e.g., Jest / Vitest)
-- Bundler / Dev server: (e.g., Vite, Webpack — add whichever you use)
-
-> Tip: Update the bullets above to reflect the exact tools used in this repository (Vite, React, Svelte, etc.).
+- Bundler / Dev server: Vite
 
 ---
 
@@ -187,6 +184,4 @@ If you'd like to see a feature added, open an issue labeled "feature".
 - Repo: https://github.com/Sourabh-noob/rupee-rumble-tqm
 - Questions? Open an issue or start a discussion in this repository.
 
----
 
-Ready to go: update the placeholders (demo URL, exact tools, tests, license) to match your project specifics, then this README will be production-ready.
