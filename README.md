@@ -22,7 +22,6 @@ Repository: https://github.com/Sourabh-noob/rupee-rumble-tqm
 - [Deployment](#deployment)
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
-- [License](#license)
 - [Acknowledgements](#acknowledgements)
 - [Contact](#contact)
 
@@ -174,11 +173,6 @@ Please follow these guidelines:
 - Admin dashboard for event configuration and moderation
 
 If you'd like to see a feature added, open an issue labeled "feature".
-
----
-
-## License
-Add a license file to the repository (e.g., MIT). Until then, this repository defaults to "All rights reserved" — update LICENSE to clarify.
 
 ---
 
