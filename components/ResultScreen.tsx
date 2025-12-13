@@ -56,9 +56,9 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
 
       <div className="relative z-10 space-y-8">
         <div className="text-center space-y-4">
-            <h2 className="text-3xl font-display font-bold text-white drop-shadow-md">ROUND SETTLEMENT</h2>
-            <div className="inline-block px-6 py-3 bg-slate-800/90 backdrop-blur rounded-full border border-slate-600 shadow-xl">
-            Correct Answer: <span className="text-2xl font-bold text-yellow-400 ml-2">{correctAnswer}</span>
+            <h2 className="text-3xl font-display font-bold text-slate-900 dark:text-white drop-shadow-md">ROUND SETTLEMENT</h2>
+            <div className="inline-block px-6 py-3 bg-white/90 dark:bg-slate-800/90 backdrop-blur rounded-full border border-slate-200 dark:border-slate-600 shadow-xl">
+            Correct Answer: <span className="text-2xl font-bold text-yellow-600 dark:text-yellow-400 ml-2">{correctAnswer}</span>
             </div>
         </div>
 
@@ -72,24 +72,24 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
                         key={opt}
                         className={`relative p-6 rounded-xl border-2 flex flex-col items-center text-center overflow-hidden transition-all duration-500 ${
                             isCorrect 
-                            ? 'bg-green-900/40 border-green-500 shadow-xl shadow-green-900/30 scale-105 backdrop-blur-sm' 
-                            : 'bg-red-900/20 border-red-900/30 opacity-80 backdrop-blur-sm'
+                            ? 'bg-green-100/40 dark:bg-green-900/40 border-green-500 shadow-xl shadow-green-900/30 scale-105 backdrop-blur-sm' 
+                            : 'bg-red-100/40 dark:bg-red-900/20 border-red-200 dark:border-red-900/30 opacity-80 backdrop-blur-sm'
                         }`}
                     >
-                        <div className={`text-4xl font-bold mb-2 ${isCorrect ? 'text-green-400' : 'text-red-400'}`}>
+                        <div className={`text-4xl font-bold mb-2 ${isCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
                             {opt}
                         </div>
-                        <div className="text-sm text-slate-300 mb-4 h-10 flex items-center justify-center font-medium">
+                        <div className="text-sm text-slate-600 dark:text-slate-300 mb-4 h-10 flex items-center justify-center font-medium">
                             {question.options[opt]}
                         </div>
-                        <div className="font-mono text-xl mb-2 text-white font-bold">₹{amount}</div>
+                        <div className="font-mono text-xl mb-2 text-slate-900 dark:text-white font-bold">₹{amount}</div>
                         
                         {isCorrect ? (
-                            <div className="flex items-center text-green-400 text-sm font-bold gap-1 mt-auto">
+                            <div className="flex items-center text-green-600 dark:text-green-400 text-sm font-bold gap-1 mt-auto">
                                 <CheckCircle size={16} /> RETAINED
                             </div>
                         ) : (
-                            <div className="flex items-center text-red-400 text-sm font-bold gap-1 mt-auto">
+                            <div className="flex items-center text-red-500 dark:text-red-400 text-sm font-bold gap-1 mt-auto">
                                 <XCircle size={16} /> LOST
                             </div>
                         )}
@@ -98,22 +98,22 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
             })}
         </div>
 
-        <div className="bg-slate-800/80 backdrop-blur-xl p-8 rounded-2xl border border-slate-700 text-center space-y-4 shadow-2xl">
+        <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center space-y-4 shadow-2xl">
             <div className="grid grid-cols-2 gap-8 max-w-lg mx-auto">
                 <div>
-                    <div className="text-slate-400 text-sm uppercase tracking-wider mb-1">Starting Balance</div>
-                    <div className="font-mono text-2xl text-slate-300">₹{startBalance}</div>
+                    <div className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider mb-1">Starting Balance</div>
+                    <div className="font-mono text-2xl text-slate-700 dark:text-slate-300">₹{startBalance}</div>
                 </div>
                 <div>
-                    <div className="text-slate-400 text-sm uppercase tracking-wider mb-1">New NAV</div>
-                    <div className={`font-mono text-3xl font-bold ${keptAmount > 0 ? 'text-white' : 'text-red-500'}`}>
+                    <div className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider mb-1">New NAV</div>
+                    <div className={`font-mono text-3xl font-bold ${keptAmount > 0 ? 'text-slate-900 dark:text-white' : 'text-red-600 dark:text-red-500'}`}>
                         ₹{keptAmount}
                     </div>
                 </div>
             </div>
             
             {keptAmount === 0 ? (
-                <div className="mt-8 p-4 bg-red-900/50 border border-red-500/50 rounded-lg text-red-200 backdrop-blur">
+                <div className="mt-8 p-4 bg-red-100/50 dark:bg-red-900/50 border border-red-200 dark:border-red-500/50 rounded-lg text-red-800 dark:text-red-200 backdrop-blur">
                     <h3 className="text-xl font-bold mb-2">BANKRUPT</h3>
                     <p>Your trading capital has been depleted.</p>
                 </div>

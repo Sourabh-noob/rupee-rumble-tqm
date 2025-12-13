@@ -65,34 +65,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   return (
     <div className="flex-1 w-full max-w-5xl mx-auto p-8 space-y-8 overflow-y-auto">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-display font-bold text-white">Admin Dashboard</h1>
+        <h1 className="text-3xl font-display font-bold text-slate-900 dark:text-white">Admin Dashboard</h1>
         <button 
             onClick={onLogout}
-            className="flex items-center gap-2 bg-red-900/20 hover:bg-red-900/40 text-red-400 px-4 py-2 rounded-lg transition-colors border border-red-900/30"
+            className="flex items-center gap-2 bg-red-100 dark:bg-red-900/20 hover:bg-red-200 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 px-4 py-2 rounded-lg transition-colors border border-red-200 dark:border-red-900/30"
         >
             <LogOut size={16} /> Exit
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Clock size={20} className="text-indigo-400"/> Game Settings
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-6 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Clock size={20} className="text-indigo-500 dark:text-indigo-400"/> Game Settings
             </h2>
             <div className="flex items-center gap-4">
-                <label className="text-slate-300">Timer Duration (seconds):</label>
+                <label className="text-slate-600 dark:text-slate-300">Timer Duration (seconds):</label>
                 <input 
                     type="number"
                     value={localDuration}
                     onChange={(e) => setLocalDuration(parseInt(e.target.value) || 60)}
-                    className="bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white w-24"
+                    className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-3 py-2 text-slate-900 dark:text-white w-24"
                 />
             </div>
         </div>
 
-        <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-6">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Play size={20} className="text-green-400"/> Live Controls
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-6 shadow-sm">
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Play size={20} className="text-green-500 dark:text-green-400"/> Live Controls
             </h2>
             <div className="flex flex-wrap gap-2">
                 <button 
@@ -114,7 +114,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <RotateCcw size={16} /> Restart Timer
                 </button>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
                 Note: "Start Timer" will actively switch the game view to Playing mode if you exit dashboard.
             </p>
         </div>
@@ -122,7 +122,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       <div className="space-y-6">
         <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-white">Question Editor</h2>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white">Question Editor</h2>
             <button 
                 onClick={addQuestion}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
@@ -132,23 +132,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
         </div>
 
         {localQuestions.map((q, index) => (
-            <div key={q.id} className="bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <div key={q.id} className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 shadow-sm">
                 <div className="flex justify-between items-start">
                     <span className="text-xs text-slate-500 font-mono uppercase">Question {index + 1}</span>
                     <button 
                         onClick={() => removeQuestion(index)}
-                        className="text-slate-500 hover:text-red-400 transition-colors"
+                        className="text-slate-400 hover:text-red-500 transition-colors"
                     >
                         <Trash2 size={16} />
                     </button>
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="text-xs text-slate-400">Question Text</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400">Question Text</label>
                     <textarea 
                         value={q.text}
                         onChange={(e) => handleQuestionChange(index, 'text', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white text-sm"
+                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-slate-900 dark:text-white text-sm"
                         rows={2}
                     />
                 </div>
@@ -156,25 +156,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(['A', 'B', 'C', 'D'] as const).map(opt => (
                         <div key={opt} className="flex items-center gap-2">
-                            <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${q.correctAnswer === opt ? 'bg-green-600 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                            <div className={`w-8 h-8 flex items-center justify-center rounded font-bold text-sm ${q.correctAnswer === opt ? 'bg-green-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
                                 {opt}
                             </div>
                             <input 
                                 type="text"
                                 value={q.options[opt]}
                                 onChange={(e) => handleQuestionChange(index, 'options', e.target.value, opt)}
-                                className="flex-1 bg-slate-900 border border-slate-600 rounded p-2 text-white text-sm"
+                                className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-slate-900 dark:text-white text-sm"
                             />
                         </div>
                     ))}
                 </div>
 
                 <div className="flex items-center gap-4 pt-2">
-                    <label className="text-xs text-slate-400">Correct Answer:</label>
+                    <label className="text-xs text-slate-500 dark:text-slate-400">Correct Answer:</label>
                     <select 
                         value={q.correctAnswer}
                         onChange={(e) => handleQuestionChange(index, 'correctAnswer', e.target.value)}
-                        className="bg-slate-900 border border-slate-600 rounded px-3 py-1 text-white text-sm"
+                        className="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-3 py-1 text-slate-900 dark:text-white text-sm"
                     >
                         <option value="A">A</option>
                         <option value="B">B</option>

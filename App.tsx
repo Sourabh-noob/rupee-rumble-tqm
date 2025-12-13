@@ -7,7 +7,7 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
-import { Loader, Hourglass } from 'lucide-react';
+import { Loader, Hourglass, Sun, Moon } from 'lucide-react';
 
 const MAX_ROUNDS = 5;
 
@@ -25,6 +25,28 @@ const App: React.FC = () => {
   const [isTimerActive, setIsTimerActive] = useState(false);
   const [isTimerFinished, setIsTimerFinished] = useState(false);
   const [timerDuration, setTimerDuration] = useState(40); // Default to 40 seconds
+
+  // Theme State
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+        const saved = localStorage.getItem('theme');
+        if (saved) return saved === 'dark';
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
   // Initialize questions on load
   useEffect(() => {
@@ -163,9 +185,9 @@ const App: React.FC = () => {
 
     if (gameState === GameState.LOADING_QUESTIONS) {
         return (
-            <div className="flex-1 flex flex-col items-center justify-center text-white space-y-4">
+            <div className="flex-1 flex flex-col items-center justify-center space-y-4">
                 <Loader className="animate-spin w-12 h-12 text-yellow-500" />
-                <p className="font-display text-xl animate-pulse">Entering the Arena...</p>
+                <p className="font-display text-xl animate-pulse text-slate-600 dark:text-slate-300">Entering the Arena...</p>
             </div>
         );
     }
@@ -180,18 +202,25 @@ const App: React.FC = () => {
     return (
         <div className="flex-1 flex flex-col">
             {/* Top Bar */}
-            <header className="bg-slate-800 border-b border-slate-700 p-4 sticky top-0 z-50">
+            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-50 transition-colors duration-300">
                 <div className="max-w-7xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div>
-                            <h1 className="font-bold text-white leading-tight">{team?.name}</h1>
-                            <div className="text-xs text-slate-400">Round {roundIndex + 1} of {MAX_ROUNDS}</div>
+                            <h1 className="font-bold text-slate-900 dark:text-white leading-tight">{team?.name}</h1>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Round {roundIndex + 1} of {MAX_ROUNDS}</div>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-6">
+                         <button
+                            onClick={toggleTheme}
+                            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors"
+                            aria-label="Toggle Theme"
+                        >
+                            {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
                         <div className="text-right">
-                            <div className="text-xs text-slate-400 uppercase tracking-widest">Current NAV</div>
-                            <div className="text-2xl font-mono font-bold text-yellow-400">₹{team?.balance}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-widest">Current NAV</div>
+                            <div className="text-2xl font-mono font-bold text-yellow-600 dark:text-yellow-400">₹{team?.balance}</div>
                         </div>
                     </div>
                 </div>
@@ -203,10 +232,10 @@ const App: React.FC = () => {
                     <div className="max-w-4xl mx-auto space-y-8">
                         {/* Question Card */}
                         <div className="text-center space-y-6">
-                            <div className="inline-block px-4 py-1 bg-slate-800 rounded-full text-slate-400 text-sm font-mono border border-slate-700">
+                            <div className="inline-block px-4 py-1 bg-white dark:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 text-sm font-mono border border-slate-200 dark:border-slate-700 shadow-sm">
                                 QUESTION {roundIndex + 1}
                             </div>
-                            <h2 className="text-2xl md:text-4xl font-display font-bold leading-tight">
+                            <h2 className="text-2xl md:text-4xl font-display font-bold leading-tight text-slate-900 dark:text-slate-100 transition-colors">
                                 {currentQuestion.text}
                             </h2>
                             
@@ -246,12 +275,25 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
+      {/* Fallback theme toggle if not logged in (mostly for EntryScreen) */}
+      {gameState === GameState.ENTRY && (
+          <div className="absolute top-4 right-4 z-50">
+             <button
+                onClick={toggleTheme}
+                className="p-3 rounded-full bg-white/10 backdrop-blur hover:bg-white/20 text-white transition-colors border border-white/10"
+                aria-label="Toggle Theme"
+            >
+                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+            </button>
+          </div>
+      )}
+
       {renderContent()}
       
       {/* Global Footer */}
-      <footer className="w-full bg-slate-950 border-t border-slate-800 p-4 text-center">
-          <p className="text-slate-500 font-display text-sm tracking-wider">
+      <footer className="w-full bg-slate-100 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 p-4 text-center transition-colors duration-300">
+          <p className="text-slate-500 dark:text-slate-500 font-display text-sm tracking-wider">
               The QuizMasters wish you luck
           </p>
       </footer>

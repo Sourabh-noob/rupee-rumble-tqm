@@ -72,7 +72,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
              fill="none"
              stroke="currentColor"
              strokeWidth="2"
-             className="text-gray-800"
+             className="text-slate-200 dark:text-slate-800 transition-colors duration-300"
            />
            <circle
              cx="60"
