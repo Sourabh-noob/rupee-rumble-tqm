@@ -31,15 +31,15 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
       {/* Custom Animations */}
       <style>{`
         @keyframes success-pulse {
-          0% { transform: scale(1.02); box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.8); }
-          50% { transform: scale(1.05); box-shadow: 0 0 40px rgba(34, 197, 94, 0.7); border-color: rgba(34, 197, 94, 1); }
-          100% { transform: scale(1.02); box-shadow: 0 0 20px rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.8); }
+          0% { transform: scale(1); box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.6); }
+          50% { transform: scale(1.03); box-shadow: 0 0 30px rgba(34, 197, 94, 0.7); border-color: rgba(34, 197, 94, 1); }
+          100% { transform: scale(1); box-shadow: 0 0 15px rgba(34, 197, 94, 0.4); border-color: rgba(34, 197, 94, 0.6); }
         }
         .animate-success-pulse {
-          animation: success-pulse 2.5s infinite ease-in-out;
+          animation: success-pulse 3s infinite ease-in-out;
         }
         .glow-red {
-          box-shadow: 0 0 25px rgba(239, 68, 68, 0.3);
+          box-shadow: 0 0 20px rgba(239, 68, 68, 0.4);
         }
       `}</style>
 
@@ -84,7 +84,7 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
                 return (
                     <div 
                         key={opt}
-                        className={`relative p-6 rounded-xl border-2 flex flex-col items-center text-center overflow-hidden transition-all duration-500 cursor-default hover:shadow-[0_0_35px_rgba(250,204,21,0.5)] hover:border-yellow-400/60 hover:-translate-y-1 ${
+                        className={`relative p-6 rounded-xl border-2 flex flex-col items-center text-center overflow-hidden transition-all duration-500 cursor-default ${
                             isCorrect 
                             ? 'bg-green-100/40 dark:bg-green-900/40 animate-success-pulse z-10 backdrop-blur-md' 
                             : 'bg-red-100/40 dark:bg-red-900/20 border-red-200 dark:border-red-900/30 opacity-80 backdrop-blur-sm glow-red'
