@@ -21,6 +21,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
     e.preventDefault();
     if (teamName && members) {
       onJoin({
+        id: `team-${Date.now()}`,
         name: teamName,
         members: members,
         balance: 1000,

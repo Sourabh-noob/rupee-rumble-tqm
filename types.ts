@@ -1,6 +1,7 @@
 export type ImageSize = '1K' | '2K' | '4K';
 
 export interface Team {
+  id: string;
   name: string;
   members: string;
   avatarUrl?: string;
@@ -10,6 +11,8 @@ export interface Team {
 
 export interface Question {
   id: string;
+  roundNumber: number; // 1-5
+  questionNumber: number; // 1-5
   text: string;
   options: {
     A: string;
@@ -29,6 +32,7 @@ export interface Allocations {
 
 export interface RoundResult {
   roundNumber: number;
+  questionNumber: number;
   startBalance: number;
   allocations: Allocations;
   correctAnswer: 'A' | 'B' | 'C' | 'D';
@@ -36,21 +40,8 @@ export interface RoundResult {
 }
 
 export enum GameState {
-  ENTRY = 'ENTRY',
-  LOADING_QUESTIONS = 'LOADING_QUESTIONS',
-  PLAYING = 'PLAYING',
-  ROUND_RESULT = 'ROUND_RESULT',
+  SETUP = 'SETUP', // Initial screen to name the 6 teams
+  ADMIN_DASHBOARD = 'ADMIN_DASHBOARD', // Rounds Manager & Live Control
+  PLAYING = 'PLAYING', // The Team Grid Screen
   GAME_OVER = 'GAME_OVER',
-  ADMIN_DASHBOARD = 'ADMIN_DASHBOARD',
-}
-
-export interface GameContextType {
-  team: Team | null;
-  setTeam: (team: Team) => void;
-  gameState: GameState;
-  setGameState: (state: GameState) => void;
-  currentRoundIndex: number;
-  setCurrentRoundIndex: (index: number) => void;
-  questions: Question[];
-  setQuestions: (questions: Question[]) => void;
 }
