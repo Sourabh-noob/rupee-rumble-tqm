@@ -10,8 +10,6 @@ import { generateGameQuestions, generateTeamLogo } from './services/geminiServic
 import { Sun, Moon, Volume2, VolumeX } from 'lucide-react';
 import { playSound } from './utils/sound';
 
-const TIMER_DURATION = 45;
-
 const App: React.FC = () => {
   // Application State
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
@@ -22,6 +20,9 @@ const App: React.FC = () => {
     return true;
   });
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Game Settings (Editable via Admin)
+  const [timerDuration, setTimerDuration] = useState(40);
 
   // Game Data
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -61,25 +62,52 @@ const App: React.FC = () => {
 
     setTeam(newTeam);
     setGameState(GameState.PLAYING);
-    startRound();
+    startRound(newTeam.balance);
   };
 
-  const startRound = () => {
+  const startRound = (currentBalance: number) => {
     setAllocations({ A: 0, B: 0, C: 0, D: 0 });
     setHasSubmitted(false);
     setShowResult(false);
     setIsTimerActive(true);
-    setStartBalance(team?.balance || 1000);
+    setStartBalance(currentBalance);
+  };
+
+  const handleAdminStartRound = (roundNum: number, questionNum: number) => {
+    // 1. Find the index in the flat questions array
+    const index = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === questionNum);
+    
+    if (index !== -1) {
+        setCurrentRoundIndex(index);
+        
+        // 2. Ensure a team exists (if Admin skipped Entry Screen)
+        let currentTeam = team;
+        if (!currentTeam) {
+            currentTeam = {
+                id: 'admin-demo',
+                name: 'Admin Demo Team',
+                members: 'Facilitator',
+                balance: 1000,
+                history: []
+            };
+            setTeam(currentTeam);
+        }
+
+        // 3. Transition State
+        setGameState(GameState.PLAYING);
+        
+        // 4. Reset Round State
+        setAllocations({ A: 0, B: 0, C: 0, D: 0 });
+        setHasSubmitted(false);
+        setShowResult(false);
+        setIsTimerActive(true);
+        setStartBalance(currentTeam.balance);
+    }
   };
 
   const handleManualSubmit = () => {
     setHasSubmitted(true);
-    setIsTimerActive(false);
-    // Add a small delay for suspense before showing result?
-    // For now, immediate result trigger or wait for admin? 
-    // In single player mode, we just wait for timer or immediate transition?
-    // Let's transition immediately for better UX in single player.
-    handleRoundEnd(); 
+    // Timer continues running until 0
   };
 
   const handleTimeUp = () => {
@@ -115,8 +143,8 @@ const App: React.FC = () => {
     });
 
     if (soundEnabled) {
-        if (keptAmount >= team.balance && team.balance > 0) playSound('start'); // success sound reuse
-        else playSound('end'); // failure/neutral sound reuse
+        if (keptAmount >= team.balance && team.balance > 0) playSound('start'); 
+        else playSound('end'); 
     }
 
     setShowResult(true);
@@ -132,18 +160,7 @@ const App: React.FC = () => {
     }
 
     setCurrentRoundIndex(prev => prev + 1);
-    
-    // Reset Round State is handled in effect or explicit call?
-    // We need to update state, then start round.
-    // React state updates are batched, so we can't rely on 'currentRoundIndex' immediately being updated in startRound if we called it here.
-    // Instead, we'll set flags and use an effect or just reset logic here.
-    
-    setAllocations({ A: 0, B: 0, C: 0, D: 0 });
-    setHasSubmitted(false);
-    setShowResult(false);
-    setIsTimerActive(true);
-    // startBalance will be updated to current team.balance (which was updated in handleRoundEnd)
-    setStartBalance(team.balance);
+    startRound(team.balance);
   };
 
   const handleRestart = () => {
@@ -152,134 +169,146 @@ const App: React.FC = () => {
     setGameState(GameState.SETUP);
   };
 
-  // --- Render ---
-
-  // 1. Setup / Entry
-  if (gameState === GameState.SETUP) {
-    return (
-        <div className="min-h-screen relative">
-            <div className="absolute top-4 right-4 flex gap-2">
-                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-                    {isDarkMode ? <Sun className="text-white"/> : <Moon />}
-                </button>
-            </div>
-            <EntryScreen 
-                onJoin={handleJoin} 
-                onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)}
-            />
-        </div>
-    );
-  }
-
-  // 2. Admin Dashboard
-  if (gameState === GameState.ADMIN_DASHBOARD) {
-    return (
-        <AdminDashboard 
-            questions={questions}
-            setQuestions={setQuestions}
-            timerDuration={TIMER_DURATION}
-            setTimerDuration={() => {}} // Read-only in this simplified revert
-            onLogout={() => setGameState(GameState.SETUP)}
-            onStartRound={() => {}} // No-op for single player
-        />
-    );
-  }
-
-  // 3. Final Standings
-  if (gameState === GameState.GAME_OVER && team) {
-      return (
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors">
-              <FinalStandings team={team} onRestart={handleRestart} />
-          </div>
-      );
-  }
-
-  // 4. Game Loop (Playing)
-  const currentQuestion = questions[currentRoundIndex];
-
-  if (gameState === GameState.PLAYING && team && currentQuestion) {
-      return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col">
-            {/* Header */}
-            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
-                <div className="max-w-7xl mx-auto flex justify-between items-center">
-                    <div className="flex items-center gap-4">
-                        {team.avatarUrl && <img src={team.avatarUrl} alt="Logo" className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-600" />}
-                        <div>
-                            <h2 className="font-bold text-slate-900 dark:text-white leading-tight">{team.name}</h2>
-                            <div className="text-xs text-slate-500 font-mono">Current NAV: ₹{team.balance}</div>
-                        </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className="hidden md:block text-right">
-                            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
-                            <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
-                        </div>
-                        <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                        </button>
-                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                             {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
-                        </button>
-                    </div>
+  // --- Render Views ---
+  
+  const renderContent = () => {
+      // 1. Setup / Entry
+      if (gameState === GameState.SETUP) {
+        return (
+            <div className="min-h-screen relative pb-12">
+                <div className="absolute top-4 right-4 flex gap-2">
+                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                        {isDarkMode ? <Sun className="text-white"/> : <Moon />}
+                    </button>
                 </div>
-            </header>
+                <EntryScreen 
+                    onJoin={handleJoin} 
+                    onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)}
+                />
+            </div>
+        );
+      }
 
-            {/* Main Content */}
-            <main className="flex-1 container mx-auto p-4 md:p-8 max-w-6xl flex flex-col">
-                {showResult ? (
-                    <ResultScreen 
-                        question={currentQuestion}
-                        allocations={allocations}
-                        startBalance={startBalance}
-                        onNext={handleNextRound}
-                        isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
-                    />
-                ) : (
-                    <div className="space-y-8 animate-fade-in">
-                        {/* Question Section */}
-                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
-                             <div className="flex flex-col md:flex-row gap-8 items-start">
-                                <div className="flex-1 space-y-6 relative z-10">
-                                    <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">
-                                        Market Query
-                                    </span>
-                                    <h3 className="text-2xl md:text-3xl font-display font-bold text-slate-900 dark:text-white leading-relaxed">
-                                        {currentQuestion.text}
-                                    </h3>
-                                </div>
-                                <div className="flex-shrink-0">
-                                    <Timer 
-                                        duration={TIMER_DURATION} 
-                                        isActive={isTimerActive} 
-                                        onTimeUp={handleTimeUp}
-                                    />
-                                </div>
-                             </div>
+      // 2. Admin Dashboard
+      if (gameState === GameState.ADMIN_DASHBOARD) {
+        return (
+            <AdminDashboard 
+                questions={questions}
+                setQuestions={setQuestions}
+                timerDuration={timerDuration}
+                setTimerDuration={setTimerDuration}
+                onLogout={() => setGameState(GameState.SETUP)}
+                onStartRound={handleAdminStartRound}
+            />
+        );
+      }
+
+      // 3. Final Standings
+      if (gameState === GameState.GAME_OVER && team) {
+          return (
+              <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors pb-12">
+                  <FinalStandings team={team} onRestart={handleRestart} />
+              </div>
+          );
+      }
+
+      // 4. Game Loop (Playing)
+      const currentQuestion = questions[currentRoundIndex];
+
+      if (gameState === GameState.PLAYING && team && currentQuestion) {
+          return (
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12">
+                {/* Header */}
+                <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
+                    <div className="max-w-7xl mx-auto flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            {team.avatarUrl && <img src={team.avatarUrl} alt="Logo" className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-600" />}
+                            <div>
+                                <h2 className="font-bold text-slate-900 dark:text-white leading-tight">{team.name}</h2>
+                                <div className="text-xs text-slate-500 font-mono">Current NAV: ₹{team.balance}</div>
+                            </div>
                         </div>
+                        
+                        <div className="flex items-center gap-4">
+                            <div className="hidden md:block text-right">
+                                <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
+                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
+                            </div>
+                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                            </button>
+                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                 {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
+                            </button>
+                        </div>
+                    </div>
+                </header>
 
-                        {/* Allocation Board */}
-                        <AllocationBoard 
-                            balance={team.balance}
+                {/* Main Content */}
+                <main className="flex-1 container mx-auto p-4 md:p-8 max-w-6xl flex flex-col">
+                    {showResult ? (
+                        <ResultScreen 
                             question={currentQuestion}
                             allocations={allocations}
-                            setAllocations={setAllocations}
-                            isTimerActive={isTimerActive}
-                            hasSubmitted={hasSubmitted}
-                            onManualSubmit={handleManualSubmit}
+                            startBalance={startBalance}
+                            onNext={handleNextRound}
+                            isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
                         />
-                    </div>
-                )}
-            </main>
+                    ) : (
+                        <div className="space-y-8 animate-fade-in">
+                            {/* Question Section */}
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
+                                 <div className="flex flex-col md:flex-row gap-8 items-start">
+                                    <div className="flex-1 space-y-6 relative z-10">
+                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">
+                                            Market Query
+                                        </span>
+                                        <h3 className="text-2xl md:text-3xl font-display font-bold text-slate-900 dark:text-white leading-relaxed">
+                                            {currentQuestion.text}
+                                        </h3>
+                                    </div>
+                                    <div className="flex-shrink-0">
+                                        <Timer 
+                                            duration={timerDuration} 
+                                            isActive={isTimerActive} 
+                                            onTimeUp={handleTimeUp}
+                                        />
+                                    </div>
+                                 </div>
+                            </div>
+
+                            {/* Allocation Board */}
+                            <AllocationBoard 
+                                balance={team.balance}
+                                question={currentQuestion}
+                                allocations={allocations}
+                                setAllocations={setAllocations}
+                                isTimerActive={isTimerActive}
+                                hasSubmitted={hasSubmitted}
+                                onManualSubmit={handleManualSubmit}
+                            />
+                        </div>
+                    )}
+                </main>
+            </div>
+          );
+      }
+      
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
         </div>
       );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
-    </div>
+      <>
+        {renderContent()}
+        {/* Persistent Footer */}
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 py-2 text-center text-xs font-mono uppercase tracking-[0.2em] z-50 border-t border-slate-800 shadow-lg">
+            The QuizMasterz wish you luck
+        </div>
+      </>
   );
 };
 

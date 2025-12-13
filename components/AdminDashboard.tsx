@@ -50,7 +50,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const roundQuestions = localQuestions.filter(q => q.roundNumber === selectedRound).sort((a,b) => a.questionNumber - b.questionNumber);
 
   return (
-    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-slate-900">
+    <div className="flex-1 flex flex-col h-screen overflow-hidden bg-slate-100 dark:bg-slate-900 pb-12">
       {/* Header */}
       <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center z-10">
         <h1 className="text-2xl font-display font-bold text-slate-900 dark:text-white">Admin Control</h1>
@@ -101,8 +101,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             <input 
                                 type="number" 
                                 value={timerDuration}
-                                onChange={(e) => setTimerDuration(parseInt(e.target.value))}
-                                className="bg-transparent w-full text-sm outline-none font-mono"
+                                onChange={(e) => setTimerDuration(parseInt(e.target.value) || 0)}
+                                className="bg-transparent w-full text-sm outline-none font-mono text-slate-900 dark:text-white"
                             />
                         </div>
                     </div>
@@ -125,21 +125,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                     <textarea 
                                         value={q.text}
                                         onChange={(e) => handleQuestionChange(q.id, 'text', e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                        className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none text-slate-900 dark:text-white"
                                         placeholder="Question Text"
                                         rows={2}
                                     />
                                     <div className="grid grid-cols-2 gap-4">
                                         {(['A', 'B', 'C', 'D'] as const).map(opt => (
                                             <div key={opt} className="flex gap-2 items-center">
-                                                <div className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold ${q.correctAnswer === opt ? 'bg-green-600 text-white' : 'bg-slate-200 dark:bg-slate-700'}`}>
+                                                <div className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold ${q.correctAnswer === opt ? 'bg-green-600 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
                                                     {opt}
                                                 </div>
                                                 <input 
                                                     type="text"
                                                     value={q.options[opt]}
                                                     onChange={(e) => handleQuestionChange(q.id, 'options', e.target.value, opt)}
-                                                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-xs"
+                                                    className="flex-1 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded p-2 text-xs text-slate-900 dark:text-white"
                                                 />
                                             </div>
                                         ))}
@@ -149,7 +149,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                                         <select 
                                             value={q.correctAnswer}
                                             onChange={(e) => handleQuestionChange(q.id, 'correctAnswer', e.target.value)}
-                                            className="bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs"
+                                            className="bg-slate-100 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-xs text-slate-900 dark:text-white"
                                         >
                                             <option value="A">A</option>
                                             <option value="B">B</option>
