@@ -20,6 +20,7 @@ interface GameGridProps {
   onNextQuestion: () => void;
   onRevealAnswer: () => void;
   isAnswerRevealed: boolean;
+  soundEnabled: boolean;
 }
 
 const GameGrid: React.FC<GameGridProps> = ({
@@ -36,7 +37,8 @@ const GameGrid: React.FC<GameGridProps> = ({
   teamAllocations,
   onNextQuestion,
   onRevealAnswer,
-  isAnswerRevealed
+  isAnswerRevealed,
+  soundEnabled
 }) => {
   const [showControls, setShowControls] = useState(false);
 
@@ -98,6 +100,7 @@ const GameGrid: React.FC<GameGridProps> = ({
                     duration={timerDuration} 
                     isActive={isTimerActive} 
                     onTimeUp={onTimeUp} 
+                    soundEnabled={soundEnabled}
                 />
             </div>
         </div>

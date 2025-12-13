@@ -44,7 +44,6 @@ const FinalStandings: React.FC<FinalStandingsProps> = ({ team, onRestart }) => {
   ];
 
   const finalBalance = team.balance;
-  const roi = ((finalBalance - 1000) / 1000) * 100;
 
   return (
     <div className="min-h-screen p-4 md:p-8 flex flex-col items-center max-w-7xl mx-auto space-y-12">
@@ -59,16 +58,10 @@ const FinalStandings: React.FC<FinalStandingsProps> = ({ team, onRestart }) => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full max-w-5xl">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-lg transition-colors group hover:border-yellow-500/50">
             <div className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider font-bold">Final NAV</div>
             <div className="text-5xl font-mono font-bold text-slate-900 dark:text-white mt-4 group-hover:scale-110 transition-transform">₹{finalBalance}</div>
-        </div>
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-lg transition-colors group hover:border-indigo-500/50">
-            <div className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider font-bold">ROI</div>
-            <div className={`text-5xl font-mono font-bold mt-4 group-hover:scale-110 transition-transform ${roi >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                {roi.toFixed(1)}%
-            </div>
         </div>
         <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center shadow-lg transition-colors group hover:border-purple-500/50">
             <div className="text-slate-500 dark:text-slate-400 text-sm uppercase tracking-wider font-bold">Rounds Survived</div>

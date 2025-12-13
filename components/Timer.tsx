@@ -6,14 +6,12 @@ interface TimerProps {
   duration: number;
   onTimeUp: () => void;
   isActive: boolean;
+  soundEnabled: boolean;
 }
 
-const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
+const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnabled }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
   
-  // Use a ref to store the latest onTimeUp callback.
-  // This allows us to call the latest version of the function inside the setInterval
-  // without having to include it in the useEffect dependency array (which causes the timer to reset).
   const onTimeUpRef = useRef(onTimeUp);
 
   useEffect(() => {
@@ -26,24 +24,22 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
 
   // Handle Start Sound
   useEffect(() => {
-    if (isActive) {
+    if (isActive && soundEnabled) {
       playSound('start');
     }
-  }, [isActive]);
+  }, [isActive, soundEnabled]);
 
   useEffect(() => {
     if (!isActive) return;
 
-    // Start a stable interval that doesn't reset on every tick or parent render
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
         const newValue = prev - 1;
         
         if (newValue <= 0) {
           clearInterval(interval);
-          playSound('end');
+          if (soundEnabled) playSound('end');
           
-          // Call the latest callback
           if (onTimeUpRef.current) {
             onTimeUpRef.current();
           }
@@ -51,10 +47,12 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
         }
         
         // Sound logic
-        if (newValue <= 10) {
-          playSound('urgent'); // Distinct sound for last 10s
-        } else {
-          playSound('tick');
+        if (soundEnabled) {
+          if (newValue <= 10) {
+            playSound('urgent'); 
+          } else {
+            playSound('tick');
+          }
         }
         
         return newValue;
@@ -62,7 +60,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive]); // Only restart if active state changes
+  }, [isActive, soundEnabled]); 
 
   // Visual urgency helpers
   const isUrgent = timeLeft <= 10;
@@ -83,7 +81,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
   const progress = (timeLeft / duration) * 100;
 
   return (
-    <div className="flex flex-col items-center justify-center p-4">
+    <div className="flex flex-col items-center justify-center p-2 md:p-4">
       {/* Inject custom animations */}
       <style>{`
         @keyframes heartbeat {
@@ -124,19 +122,19 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
         }
       `}</style>
 
-      <div className={`relative flex items-center justify-center w-36 h-36 rounded-full border-4 ${getColorClasses()} transition-colors duration-300 ${getContainerAnimation()}`}>
+      <div className={`relative flex items-center justify-center w-24 h-24 md:w-36 md:h-36 rounded-full border-2 md:border-4 ${getColorClasses()} transition-colors duration-300 ${getContainerAnimation()}`}>
         
         {/* Inner Content */}
         <div className="flex flex-col items-center z-10">
-            <TimerIcon className={`w-8 h-8 mb-1 ${isUrgent ? 'animate-bounce' : ''} ${getColorClasses().split(' ')[0]}`} />
-            <span className={`text-4xl font-bold font-mono leading-none ${getColorClasses().split(' ')[0]} ${isUrgent ? 'animate-urgent-text' : ''}`}>
+            <TimerIcon className={`w-5 h-5 md:w-8 md:h-8 mb-0.5 md:mb-1 ${isUrgent ? 'animate-bounce' : ''} ${getColorClasses().split(' ')[0]}`} />
+            <span className={`text-2xl md:text-4xl font-bold font-mono leading-none ${getColorClasses().split(' ')[0]} ${isUrgent ? 'animate-urgent-text' : ''}`}>
             {timeLeft}
-            <span className="text-sm ml-0.5">s</span>
+            <span className="text-xs md:text-sm ml-0.5">s</span>
             </span>
         </div>
 
         {/* Background track */}
-        <svg className="absolute top-0 left-0 w-full h-full -rotate-90 pointer-events-none transform -translate-0.5 -translate-0.5 overflow-visible">
+        <svg className="absolute top-0 left-0 w-full h-full -rotate-90 pointer-events-none overflow-visible" viewBox="0 0 144 144">
            <circle
              cx="50%"
              cy="50%"
