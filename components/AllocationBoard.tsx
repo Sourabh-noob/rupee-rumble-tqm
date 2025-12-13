@@ -33,7 +33,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({ onClick, icon: Icon, label,
         onMouseLeave={() => setIsHovered(false)}
         onFocus={() => setIsHovered(true)}
         onBlur={() => setIsHovered(false)}
-        className={`${className} w-full`}
+        className={`${className} w-full hover-glow`}
         type="button"
       >
         <Icon size={16} /> {label}
@@ -186,7 +186,7 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                     disabled={!isValid || isLocked}
                     className={`px-6 py-2 rounded-lg font-bold transition-all ${
                         isValid && !isLocked
-                        ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105'
+                        ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105 hover-glow'
                         : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
                     }`}
                 >
@@ -283,6 +283,11 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                 }
             }
 
+            // Add hover glow to cards if not locked
+            if (!isLocked) {
+                cardStyle += ' hover-glow';
+            }
+
             return (
                 <div 
                     key={option} 
@@ -325,7 +330,7 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                             <button 
                                 onClick={() => handleAllIn(option)}
                                 disabled={isLocked}
-                                className={`flex-1 text-xs font-bold py-1 px-2 rounded uppercase tracking-wider transition-colors disabled:opacity-50 ${
+                                className={`flex-1 text-xs font-bold py-1 px-2 rounded uppercase tracking-wider transition-colors disabled:opacity-50 hover-glow ${
                                     amount > 0 && percentage === 100 
                                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/30' 
                                     : 'bg-indigo-100 dark:bg-indigo-600/20 hover:bg-indigo-200 dark:hover:bg-indigo-600/40 text-indigo-700 dark:text-indigo-300'
@@ -333,7 +338,7 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                             >
                                 All In
                             </button>
-                            <div className={`flex items-center bg-white dark:bg-slate-900 rounded px-2 border focus-within:ring-1 focus-within:ring-indigo-500 ${amount > 0 ? 'border-slate-300 dark:border-slate-700' : 'border-slate-300 dark:border-slate-700'}`}>
+                            <div className={`flex items-center bg-white dark:bg-slate-900 rounded px-2 border focus-within:ring-1 focus-within:ring-indigo-500 focus-glow ${amount > 0 ? 'border-slate-300 dark:border-slate-700' : 'border-slate-300 dark:border-slate-700'}`}>
                                 <DollarSign size={14} className="text-slate-400 dark:text-slate-500" />
                                 <input
                                     type="number"

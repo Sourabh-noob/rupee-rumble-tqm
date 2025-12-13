@@ -137,7 +137,7 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
         <div className="flex justify-center pt-8">
             <button
             onClick={onNext}
-            className="group flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-12 rounded-xl transition-all shadow-lg shadow-indigo-900/30 hover:scale-105"
+            className="group flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 px-12 rounded-xl transition-all shadow-lg shadow-indigo-900/30 hover:scale-105 hover-glow"
             >
             {keptAmount === 0 ? 'View Final Results' : isGameOver ? 'View Final Standings' : 'Next Round'}
             <ArrowRight className="group-hover:translate-x-1 transition-transform" />

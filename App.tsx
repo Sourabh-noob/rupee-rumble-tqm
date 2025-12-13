@@ -165,7 +165,7 @@ const App: React.FC = () => {
         return (
             <div className="min-h-screen flex flex-col relative pb-12">
                 <div className="absolute top-4 right-4 flex gap-2 z-10">
-                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors hover-glow">
                         {isDarkMode ? <Sun className="text-white"/> : <Moon />}
                     </button>
                 </div>
@@ -225,10 +225,10 @@ const App: React.FC = () => {
                                 <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
                                 <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
                             </div>
-                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover-glow rounded-full">
                                 {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
                             </button>
-                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover-glow rounded-full">
                                  {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
                             </button>
                         </div>
@@ -254,7 +254,7 @@ const App: React.FC = () => {
                                         <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">
                                             Market Query
                                         </span>
-                                        <h3 className="text-2xl md:text-3xl font-display font-bold text-slate-900 dark:text-white leading-relaxed">
+                                        <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight tracking-tight drop-shadow-sm">
                                             {currentQuestion.text}
                                         </h3>
                                     </div>

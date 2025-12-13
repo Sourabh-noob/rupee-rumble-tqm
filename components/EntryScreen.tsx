@@ -61,7 +61,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
                 type="text"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition-all"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition-all focus-glow"
                 placeholder="e.g. The Wolfpack"
                 required
                 />
@@ -74,7 +74,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
                 <textarea
                 value={members}
                 onChange={(e) => setMembers(e.target.value)}
-                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition-all h-24 resize-none"
+                className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition-all h-24 resize-none focus-glow"
                 placeholder="Alice, Bob, Charlie..."
                 required
                 />
@@ -82,7 +82,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
 
             <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-amber-900/20 transform hover:-translate-y-1 transition-all"
+                className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-amber-900/20 transform hover:-translate-y-1 transition-all hover-glow"
             >
                 ENTER THE QUIZ
             </button>

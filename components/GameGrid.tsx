@@ -64,7 +64,7 @@ const GameGrid: React.FC<GameGridProps> = ({
                     </span>
                 </div>
                 
-                <h2 className="text-2xl md:text-3xl font-display font-bold text-slate-900 dark:text-white leading-tight">
+                <h2 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight drop-shadow-sm">
                     {question.text}
                 </h2>
 
