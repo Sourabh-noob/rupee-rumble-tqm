@@ -128,8 +128,11 @@ const App: React.FC = () => {
     });
 
     if (soundEnabled) {
-        if (keptAmount >= team.balance && team.balance > 0) playSound('start'); 
-        else playSound('end'); 
+        if (keptAmount >= team.balance && team.balance > 0) {
+            playSound('profit'); 
+        } else {
+            playSound('loss'); 
+        }
     }
 
     setShowResult(true);

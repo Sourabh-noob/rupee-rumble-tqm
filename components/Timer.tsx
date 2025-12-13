@@ -51,7 +51,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
           if (newValue <= 10) {
             playSound('urgent'); 
           } else {
-            playSound('tick');
+            playSound('heartbeat');
           }
         }
         
