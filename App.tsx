@@ -7,7 +7,7 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
-import { Loader, Hourglass, Sun, Moon } from 'lucide-react';
+import { Loader, Sun, Moon } from 'lucide-react';
 
 const MAX_ROUNDS = 5;
 
@@ -274,17 +274,24 @@ const App: React.FC = () => {
     );
   };
 
+  const showHeader = gameState === GameState.PLAYING || gameState === GameState.ROUND_RESULT;
+  const showFloatingToggle = !showHeader;
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300">
-      {/* Fallback theme toggle if not logged in (mostly for EntryScreen) */}
-      {gameState === GameState.ENTRY && (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col font-sans transition-colors duration-300 relative">
+      
+      {/* Global Floating Theme Toggle (visible when header is absent) */}
+      {showFloatingToggle && (
           <div className="absolute top-4 right-4 z-50">
              <button
                 onClick={toggleTheme}
-                className="p-3 rounded-full bg-white/10 backdrop-blur hover:bg-white/20 text-white transition-colors border border-white/10"
+                className="p-3 rounded-full bg-white/80 dark:bg-slate-800/80 backdrop-blur-md hover:bg-white dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition-all border border-slate-200 dark:border-slate-700 shadow-lg group"
                 aria-label="Toggle Theme"
             >
-                {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
+                {isDarkMode ? 
+                  <Sun size={20} className="group-hover:text-yellow-500 transition-colors" /> : 
+                  <Moon size={20} className="group-hover:text-indigo-500 transition-colors" />
+                }
             </button>
           </div>
       )}
