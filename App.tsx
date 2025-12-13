@@ -7,6 +7,7 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
+import { saveToLeaderboard } from './utils/leaderboard';
 import { Loader, Sun, Moon } from 'lucide-react';
 
 const MAX_ROUNDS = 5;
@@ -139,6 +140,7 @@ const App: React.FC = () => {
     if (!team) return;
 
     if (team.balance === 0 || roundIndex >= MAX_ROUNDS - 1) {
+        saveToLeaderboard(team);
         setGameState(GameState.GAME_OVER);
     } else {
         setRoundIndex(prev => prev + 1);
