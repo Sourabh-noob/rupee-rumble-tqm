@@ -1,235 +1,286 @@
 import React, { useState, useEffect } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
-import GameGrid from './components/GameGrid';
+import AllocationBoard from './components/AllocationBoard';
+import ResultScreen from './components/ResultScreen';
+import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
-import FinalStandings from './components/FinalStandings'; // Reusing existing, though logic may need tweak for single team vs multi.
-import { generateGameQuestions } from './services/geminiService';
-import { Sun, Moon, Users, Play } from 'lucide-react';
+import Timer from './components/Timer';
+import { generateGameQuestions, generateTeamLogo } from './services/geminiService';
+import { Sun, Moon, Volume2, VolumeX } from 'lucide-react';
+import { playSound } from './utils/sound';
 
-const TEAM_COUNT = 6;
-const MAX_ROUNDS = 5;
+const TIMER_DURATION = 45;
 
 const App: React.FC = () => {
+  // Application State
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
-  
-  // Game Data
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  
-  // Cursor
-  const [activeRound, setActiveRound] = useState(1);
-  const [activeQuestionNumber, setActiveQuestionNumber] = useState(1);
-  
-  // Live State
-  const [teamAllocations, setTeamAllocations] = useState<Record<string, Allocations>>({});
-  const [isTimerActive, setIsTimerActive] = useState(false);
-  const [timerDuration, setTimerDuration] = useState(30);
-  const [isAnswerRevealed, setIsAnswerRevealed] = useState(false);
-
-  // Theme State
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
-        const saved = localStorage.getItem('theme');
-        if (saved) return saved === 'dark';
         return window.matchMedia('(prefers-color-scheme: dark)').matches;
     }
     return true;
   });
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
+  // Game Data
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [team, setTeam] = useState<Team | null>(null);
+
+  // Round State
+  const [currentRoundIndex, setCurrentRoundIndex] = useState(0); // Index in the flat questions array
+  const [allocations, setAllocations] = useState<Allocations>({ A: 0, B: 0, C: 0, D: 0 });
+  const [isTimerActive, setIsTimerActive] = useState(false);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [showResult, setShowResult] = useState(false);
+  const [startBalance, setStartBalance] = useState(1000); // Balance at start of current round
+
+  // Initialize Theme
   useEffect(() => {
     if (isDarkMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
+      document.documentElement.classList.add('dark');
     } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
+      document.documentElement.classList.remove('dark');
     }
   }, [isDarkMode]);
 
-  const toggleTheme = () => setIsDarkMode(!isDarkMode);
-
-  // Initial Load
+  // Load Questions
   useEffect(() => {
-    generateGameQuestions().then(qs => setQuestions(qs));
+    generateGameQuestions().then(qs => {
+        setQuestions(qs);
+    });
   }, []);
 
-  // Initialize Default Teams
-  const initializeTeams = (customNames?: string[]) => {
-    const newTeams: Team[] = Array.from({ length: TEAM_COUNT }).map((_, i) => ({
-        id: `team-${i + 1}`,
-        name: customNames ? customNames[i] : `Team ${i + 1}`,
-        members: 'Members',
-        balance: 1000,
-        history: []
-    }));
-    setTeams(newTeams);
-    
-    // Initialize allocations for them
-    const initialAlloc: Record<string, Allocations> = {};
-    newTeams.forEach(t => { initialAlloc[t.id] = { A: 0, B: 0, C: 0, D: 0 }; });
-    setTeamAllocations(initialAlloc);
-    
-    setGameState(GameState.ADMIN_DASHBOARD);
-  };
+  // --- Handlers ---
 
-  // --- Game Flow Controllers ---
+  const handleJoin = async (newTeam: Team) => {
+    // Generate a logo (async) but don't block entry
+    generateTeamLogo(newTeam.name, '1K').then(url => {
+        setTeam(prev => prev ? { ...prev, avatarUrl: url } : null);
+    });
 
-  const handleStartRound = (roundNum: number, questionNum: number) => {
-    setActiveRound(roundNum);
-    setActiveQuestionNumber(questionNum);
-    setIsTimerActive(false);
-    setIsAnswerRevealed(false);
-    
-    // Reset allocations for new question
-    const resetAlloc: Record<string, Allocations> = {};
-    teams.forEach(t => { resetAlloc[t.id] = { A: 0, B: 0, C: 0, D: 0 }; });
-    setTeamAllocations(resetAlloc);
-    
+    setTeam(newTeam);
     setGameState(GameState.PLAYING);
+    startRound();
   };
 
-  const handleNextQuestion = () => {
-    const nextQ = activeQuestionNumber + 1;
-    if (nextQ > 5) {
-        // Round Over -> Return to Admin? Or Auto next round?
-        // Let's go back to Admin Dashboard to select next round or review.
-        setGameState(GameState.ADMIN_DASHBOARD);
-    } else {
-        handleStartRound(activeRound, nextQ);
-    }
-  };
-
-  const handleTimerStart = () => {
+  const startRound = () => {
+    setAllocations({ A: 0, B: 0, C: 0, D: 0 });
+    setHasSubmitted(false);
+    setShowResult(false);
     setIsTimerActive(true);
-    setIsAnswerRevealed(false);
+    setStartBalance(team?.balance || 1000);
   };
 
-  const handleTimerStop = () => {
+  const handleManualSubmit = () => {
+    setHasSubmitted(true);
     setIsTimerActive(false);
+    // Add a small delay for suspense before showing result?
+    // For now, immediate result trigger or wait for admin? 
+    // In single player mode, we just wait for timer or immediate transition?
+    // Let's transition immediately for better UX in single player.
+    handleRoundEnd(); 
   };
 
   const handleTimeUp = () => {
+    setHasSubmitted(true);
     setIsTimerActive(false);
-    // Auto reveal? Or wait for facilitator?
-    // Let's wait for facilitator to hit reveal.
+    handleRoundEnd();
   };
 
-  const handleRevealAnswer = () => {
-    setIsAnswerRevealed(true);
-    setIsTimerActive(false); // Ensure locked
+  const handleRoundEnd = () => {
+    if (!team || !questions[currentRoundIndex]) return;
 
-    // Calculate Results
-    const currentQ = questions.find(q => q.roundNumber === activeRound && q.questionNumber === activeQuestionNumber);
-    if (!currentQ) return;
+    const currentQ = questions[currentRoundIndex];
+    const correctAnswer = currentQ.correctAnswer;
+    const keptAmount = allocations[correctAnswer];
 
-    setTeams(prevTeams => prevTeams.map(team => {
-        const alloc = teamAllocations[team.id] || {A:0,B:0,C:0,D:0};
-        const kept = alloc[currentQ.correctAnswer];
-        
-        // Add history if needed, for now just update balance
-        return {
-            ...team,
-            balance: kept,
-            history: [...team.history, {
-                roundNumber: activeRound,
-                questionNumber: activeQuestionNumber,
-                startBalance: team.balance,
-                allocations: alloc,
-                correctAnswer: currentQ.correctAnswer,
-                endBalance: kept
-            }]
-        };
-    }));
+    // Update Team State
+    const updatedHistory = [
+        ...team.history,
+        {
+            roundNumber: currentQ.roundNumber,
+            questionNumber: currentQ.questionNumber,
+            startBalance: team.balance,
+            allocations: allocations,
+            correctAnswer: correctAnswer,
+            endBalance: keptAmount
+        }
+    ];
+
+    setTeam({
+        ...team,
+        balance: keptAmount,
+        history: updatedHistory
+    });
+
+    if (soundEnabled) {
+        if (keptAmount >= team.balance && team.balance > 0) playSound('start'); // success sound reuse
+        else playSound('end'); // failure/neutral sound reuse
+    }
+
+    setShowResult(true);
   };
 
-  const updateTeamAllocation = (teamId: string, allocs: Allocations) => {
-    setTeamAllocations(prev => ({
-        ...prev,
-        [teamId]: allocs
-    }));
+  const handleNextRound = () => {
+    if (!team) return;
+
+    // Check Game Over
+    if (team.balance === 0 || currentRoundIndex >= questions.length - 1) {
+        setGameState(GameState.GAME_OVER);
+        return;
+    }
+
+    setCurrentRoundIndex(prev => prev + 1);
+    
+    // Reset Round State is handled in effect or explicit call?
+    // We need to update state, then start round.
+    // React state updates are batched, so we can't rely on 'currentRoundIndex' immediately being updated in startRound if we called it here.
+    // Instead, we'll set flags and use an effect or just reset logic here.
+    
+    setAllocations({ A: 0, B: 0, C: 0, D: 0 });
+    setHasSubmitted(false);
+    setShowResult(false);
+    setIsTimerActive(true);
+    // startBalance will be updated to current team.balance (which was updated in handleRoundEnd)
+    setStartBalance(team.balance);
   };
 
-  // --- View Rendering ---
+  const handleRestart = () => {
+    setTeam(null);
+    setCurrentRoundIndex(0);
+    setGameState(GameState.SETUP);
+  };
 
-  // Setup Screen (Replacement for EntryScreen)
+  // --- Render ---
+
+  // 1. Setup / Entry
   if (gameState === GameState.SETUP) {
-      return (
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4">
-              <div className="max-w-md w-full bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 text-center space-y-8">
-                  <div>
-                      <h1 className="text-4xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-yellow-600 mb-2">RUPEE RUMBLE</h1>
-                      <p className="text-slate-500">Event Setup</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                      <div className="p-4 bg-slate-100 dark:bg-slate-900 rounded-lg flex items-center justify-between">
-                          <span className="text-slate-600 dark:text-slate-400 font-bold flex items-center gap-2"><Users size={16}/> Team Count</span>
-                          <span className="font-mono font-bold text-xl dark:text-white">6</span>
-                      </div>
-                      <button 
-                        onClick={() => initializeTeams()}
-                        className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg shadow-indigo-900/20 flex items-center justify-center gap-2"
-                      >
-                        <Play size={20} /> Initialize Event
-                      </button>
-                      <button 
-                        onClick={() => setGameState(GameState.ADMIN_DASHBOARD)} // Backdoor if needed
-                        className="text-xs text-slate-400 hover:text-slate-300 underline"
-                      >
-                        Skip to Dashboard (Dev)
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )
+    return (
+        <div className="min-h-screen relative">
+            <div className="absolute top-4 right-4 flex gap-2">
+                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                    {isDarkMode ? <Sun className="text-white"/> : <Moon />}
+                </button>
+            </div>
+            <EntryScreen 
+                onJoin={handleJoin} 
+                onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)}
+            />
+        </div>
+    );
   }
 
+  // 2. Admin Dashboard
   if (gameState === GameState.ADMIN_DASHBOARD) {
-      return (
-          <AdminDashboard
+    return (
+        <AdminDashboard 
             questions={questions}
             setQuestions={setQuestions}
-            timerDuration={timerDuration}
-            setTimerDuration={setTimerDuration}
+            timerDuration={TIMER_DURATION}
+            setTimerDuration={() => {}} // Read-only in this simplified revert
             onLogout={() => setGameState(GameState.SETUP)}
-            onStartRound={handleStartRound}
-          />
-      );
+            onStartRound={() => {}} // No-op for single player
+        />
+    );
   }
 
-  // PLAYING STATE (The Grid)
-  const currentQ = questions.find(q => q.roundNumber === activeRound && q.questionNumber === activeQuestionNumber);
-
-  if (gameState === GameState.PLAYING && currentQ) {
+  // 3. Final Standings
+  if (gameState === GameState.GAME_OVER && team) {
       return (
-          <div className="h-screen flex flex-col">
-              <div className="absolute top-4 right-4 z-50">
-                <button onClick={toggleTheme} className="p-2 bg-white/10 backdrop-blur rounded-full text-white/50 hover:text-white">
-                    {isDarkMode ? <Sun size={20} /> : <Moon size={20} />}
-                </button>
-              </div>
-              <GameGrid
-                  teams={teams}
-                  question={currentQ}
-                  roundNumber={activeRound}
-                  questionNumber={activeQuestionNumber}
-                  timerDuration={timerDuration}
-                  isTimerActive={isTimerActive}
-                  onTimerStart={handleTimerStart}
-                  onTimerStop={handleTimerStop}
-                  onTimeUp={handleTimeUp}
-                  teamAllocations={teamAllocations}
-                  onUpdateTeamAllocations={updateTeamAllocation}
-                  onNextQuestion={handleNextQuestion}
-                  onRevealAnswer={handleRevealAnswer}
-                  isAnswerRevealed={isAnswerRevealed}
-              />
+          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors">
+              <FinalStandings team={team} onRestart={handleRestart} />
           </div>
       );
   }
 
-  return <div>Loading...</div>;
+  // 4. Game Loop (Playing)
+  const currentQuestion = questions[currentRoundIndex];
+
+  if (gameState === GameState.PLAYING && team && currentQuestion) {
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col">
+            {/* Header */}
+            <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
+                <div className="max-w-7xl mx-auto flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                        {team.avatarUrl && <img src={team.avatarUrl} alt="Logo" className="w-10 h-10 rounded-full border border-slate-300 dark:border-slate-600" />}
+                        <div>
+                            <h2 className="font-bold text-slate-900 dark:text-white leading-tight">{team.name}</h2>
+                            <div className="text-xs text-slate-500 font-mono">Current NAV: ₹{team.balance}</div>
+                        </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                        <div className="hidden md:block text-right">
+                            <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
+                            <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
+                        </div>
+                        <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                            {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                        </button>
+                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                             {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* Main Content */}
+            <main className="flex-1 container mx-auto p-4 md:p-8 max-w-6xl flex flex-col">
+                {showResult ? (
+                    <ResultScreen 
+                        question={currentQuestion}
+                        allocations={allocations}
+                        startBalance={startBalance}
+                        onNext={handleNextRound}
+                        isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
+                    />
+                ) : (
+                    <div className="space-y-8 animate-fade-in">
+                        {/* Question Section */}
+                        <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
+                             <div className="flex flex-col md:flex-row gap-8 items-start">
+                                <div className="flex-1 space-y-6 relative z-10">
+                                    <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">
+                                        Market Query
+                                    </span>
+                                    <h3 className="text-2xl md:text-3xl font-display font-bold text-slate-900 dark:text-white leading-relaxed">
+                                        {currentQuestion.text}
+                                    </h3>
+                                </div>
+                                <div className="flex-shrink-0">
+                                    <Timer 
+                                        duration={TIMER_DURATION} 
+                                        isActive={isTimerActive} 
+                                        onTimeUp={handleTimeUp}
+                                    />
+                                </div>
+                             </div>
+                        </div>
+
+                        {/* Allocation Board */}
+                        <AllocationBoard 
+                            balance={team.balance}
+                            question={currentQuestion}
+                            allocations={allocations}
+                            setAllocations={setAllocations}
+                            isTimerActive={isTimerActive}
+                            hasSubmitted={hasSubmitted}
+                            onManualSubmit={handleManualSubmit}
+                        />
+                    </div>
+                )}
+            </main>
+        </div>
+      );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+    </div>
+  );
 };
 
 export default App;
