@@ -20,7 +20,6 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
 }) => {
   const correctAnswer = question.correctAnswer;
   const keptAmount = allocations[correctAnswer];
-  const lostAmount = startBalance - keptAmount;
   
   // Celebration condition: Positive ROI or high retention.
   const isGreatRound = startBalance > 0 && keptAmount >= startBalance; 
@@ -29,6 +28,18 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
   return (
     <div className="w-full max-w-4xl mx-auto p-4 space-y-8 animate-fade-in relative min-h-[600px] flex flex-col justify-center">
       
+      {/* Custom Animations */}
+      <style>{`
+        @keyframes success-pulse {
+          0% { transform: scale(1.05); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.8); }
+          50% { transform: scale(1.08); box-shadow: 0 0 35px rgba(34, 197, 94, 0.6); border-color: rgba(34, 197, 94, 1); }
+          100% { transform: scale(1.05); box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); border-color: rgba(34, 197, 94, 0.8); }
+        }
+        .animate-success-pulse {
+          animation: success-pulse 2s infinite ease-in-out;
+        }
+      `}</style>
+
       {/* Background Celebration */}
       {isGreatRound && (
           <div className="absolute inset-0 z-0 overflow-hidden rounded-3xl pointer-events-none">
@@ -72,8 +83,8 @@ const ResultScreen: React.FC<ResultScreenProps> = ({
                         key={opt}
                         className={`relative p-6 rounded-xl border-2 flex flex-col items-center text-center overflow-hidden transition-all duration-500 ${
                             isCorrect 
-                            ? 'bg-green-100/40 dark:bg-green-900/40 border-green-500 shadow-xl shadow-green-900/30 scale-105 backdrop-blur-sm' 
-                            : 'bg-red-100/40 dark:bg-red-900/20 border-red-200 dark:border-red-900/30 opacity-80 backdrop-blur-sm'
+                            ? 'bg-green-100/40 dark:bg-green-900/40 animate-success-pulse z-10 backdrop-blur-md' 
+                            : 'bg-red-100/40 dark:bg-red-900/20 border-red-200 dark:border-red-900/30 opacity-80 backdrop-blur-sm shadow-[0_0_15px_rgba(239,68,68,0.15)] dark:shadow-[0_0_20px_rgba(239,68,68,0.3)]'
                         }`}
                     >
                         <div className={`text-4xl font-bold mb-2 ${isCorrect ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>

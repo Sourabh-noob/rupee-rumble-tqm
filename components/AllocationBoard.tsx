@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Allocations, Question } from '../types';
-import { DollarSign, Trash2, PieChart, Layers, AlertCircle, Lock } from 'lucide-react';
+import { DollarSign, Trash2, PieChart, Layers, AlertCircle, Lock, LucideIcon } from 'lucide-react';
 
 interface AllocationBoardProps {
   balance: number;
@@ -11,6 +11,44 @@ interface AllocationBoardProps {
   hasSubmitted: boolean;
   onManualSubmit: () => void;
 }
+
+// Helper component for buttons with tooltips
+interface ActionButtonProps {
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+  tooltip: string;
+  className: string;
+}
+
+const ActionButton: React.FC<ActionButtonProps> = ({ onClick, icon: Icon, label, tooltip, className }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  return (
+    <div className="relative w-full group">
+      <button 
+        onClick={onClick} 
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        onFocus={() => setIsHovered(true)}
+        onBlur={() => setIsHovered(false)}
+        className={`${className} w-full`}
+        type="button"
+      >
+        <Icon size={16} /> {label}
+      </button>
+      
+      {/* Tooltip */}
+      <div 
+        role="tooltip"
+        className={`absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-48 px-3 py-2 bg-slate-900/95 dark:bg-slate-700/95 backdrop-blur-sm text-white text-xs rounded-lg shadow-xl z-50 text-center pointer-events-none transition-all duration-200 origin-bottom ${isHovered ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-2'}`}
+      >
+        {tooltip}
+        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-slate-900/95 dark:border-t-slate-700/95"></div>
+      </div>
+    </div>
+  );
+};
 
 const AllocationBoard: React.FC<AllocationBoardProps> = ({
   balance,
@@ -138,18 +176,34 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
 
       {/* Quick Actions */}
       <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
-         <button onClick={handleSplitEvenly} className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300">
-            <PieChart size={16} /> Spread (Even)
-         </button>
-         <button onClick={handleReset} className="flex items-center justify-center gap-2 bg-red-100/50 dark:bg-red-900/30 hover:bg-red-200/50 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 p-2 rounded border border-red-200 dark:border-red-900/30 transition-colors text-sm">
-            <Trash2 size={16} /> Reset
-         </button>
-         <button onClick={() => handle5050('A', 'B')} className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300">
-            <Layers size={16} /> 50/50 (A & B)
-         </button>
-         <button onClick={() => handle5050('C', 'D')} className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300">
-            <Layers size={16} /> 50/50 (C & D)
-         </button>
+         <ActionButton 
+            onClick={handleSplitEvenly} 
+            icon={PieChart}
+            label="Spread (Even)"
+            tooltip="Distribute available funds equally across all 4 options."
+            className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300"
+         />
+         <ActionButton 
+            onClick={handleReset} 
+            icon={Trash2}
+            label="Reset"
+            tooltip="Recall all bets to your balance to start over."
+            className="flex items-center justify-center gap-2 bg-red-100/50 dark:bg-red-900/30 hover:bg-red-200/50 dark:hover:bg-red-900/50 text-red-600 dark:text-red-400 p-2 rounded border border-red-200 dark:border-red-900/30 transition-colors text-sm"
+         />
+         <ActionButton 
+            onClick={() => handle5050('A', 'B')} 
+            icon={Layers}
+            label="50/50 (A & B)"
+            tooltip="Split available funds equally between A and B only."
+            className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300"
+         />
+         <ActionButton 
+            onClick={() => handle5050('C', 'D')} 
+            icon={Layers}
+            label="50/50 (C & D)"
+            tooltip="Split available funds equally between C and D only."
+            className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300"
+         />
       </div>
 
       {/* Allocation Cards */}
