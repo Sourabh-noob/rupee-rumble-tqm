@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Timer as TimerIcon } from 'lucide-react';
 import { playSound } from '../utils/sound';
 
@@ -10,6 +10,15 @@ interface TimerProps {
 
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
+  
+  // Use a ref to store the latest onTimeUp callback.
+  // This allows us to call the latest version of the function inside the setInterval
+  // without having to include it in the useEffect dependency array (which causes the timer to reset).
+  const onTimeUpRef = useRef(onTimeUp);
+
+  useEffect(() => {
+    onTimeUpRef.current = onTimeUp;
+  }, [onTimeUp]);
 
   useEffect(() => {
     setTimeLeft(duration);
@@ -23,32 +32,37 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive }) => {
   }, [isActive]);
 
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (isActive && timeLeft > 0) {
-      interval = setInterval(() => {
-        setTimeLeft((prev) => {
-          const newValue = prev - 1;
+    if (!isActive) return;
+
+    // Start a stable interval that doesn't reset on every tick or parent render
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        const newValue = prev - 1;
+        
+        if (newValue <= 0) {
+          clearInterval(interval);
+          playSound('end');
           
-          if (newValue <= 0) {
-            clearInterval(interval);
-            playSound('end');
-            onTimeUp();
-            return 0;
+          // Call the latest callback
+          if (onTimeUpRef.current) {
+            onTimeUpRef.current();
           }
-          
-          // Sound logic
-          if (newValue <= 10) {
-            playSound('urgent'); // Distinct sound for last 10s
-          } else {
-            playSound('tick');
-          }
-          
-          return newValue;
-        });
-      }, 1000);
-    }
+          return 0;
+        }
+        
+        // Sound logic
+        if (newValue <= 10) {
+          playSound('urgent'); // Distinct sound for last 10s
+        } else {
+          playSound('tick');
+        }
+        
+        return newValue;
+      });
+    }, 1000);
+
     return () => clearInterval(interval);
-  }, [isActive, timeLeft, onTimeUp]);
+  }, [isActive]); // Only restart if active state changes
 
   // Visual urgency helpers
   const isUrgent = timeLeft <= 10;
