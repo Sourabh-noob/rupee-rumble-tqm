@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Allocations, Question } from '../types';
-import { DollarSign, Trash2, PieChart, Layers, AlertCircle, Lock, LucideIcon, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
+import { DollarSign, Trash2, PieChart as PieIcon, Layers, AlertCircle, Lock, LucideIcon, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
 import { playSound } from '../utils/sound';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface AllocationBoardProps {
   balance: number;
@@ -91,6 +92,16 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
     setAllocations({ ...allocations, [option]: newValue });
   };
 
+  const handlePercentage = (option: keyof Allocations, percent: number) => {
+    if (hasSubmitted) return;
+    
+    const amount = Math.floor((balance * percent) / 100);
+    // Round to nearest 100
+    const roundedAmount = Math.floor(amount / 100) * 100;
+    
+    updateAllocation(option, roundedAmount);
+  };
+
   const handleAllIn = (option: keyof Allocations) => {
     if (hasSubmitted) return;
     
@@ -148,6 +159,15 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
   // Interaction disabled if timer stopped OR if already submitted
   const isLocked = !isTimerActive || hasSubmitted;
 
+  // Chart Data
+  const chartData = [
+    { name: 'A', value: allocations.A, color: '#6366f1' }, // Indigo
+    { name: 'B', value: allocations.B, color: '#06b6d4' }, // Cyan
+    { name: 'C', value: allocations.C, color: '#10b981' }, // Emerald
+    { name: 'D', value: allocations.D, color: '#f59e0b' }, // Amber
+    { name: 'Cash', value: remaining, color: '#94a3b8' },  // Slate
+  ].filter(d => d.value > 0);
+
   return (
     <div className="w-full max-w-5xl mx-auto space-y-6">
       {/* Styles for risk pulse */}
@@ -162,45 +182,81 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
         }
       `}</style>
 
-      {/* Summary Header */}
-      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row justify-between items-center sticky top-0 z-10 shadow-xl transition-colors">
-        <div className="text-slate-500 dark:text-slate-400 font-mono text-sm uppercase tracking-widest">Allocation Status</div>
+      {/* Summary Header & Visual Portfolio */}
+      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 grid grid-cols-1 md:grid-cols-3 gap-6 sticky top-0 z-20 shadow-xl transition-colors items-center">
         
-        {!isMultipleOf100 && !isLocked && (
-            <div className="text-red-500 dark:text-red-400 text-sm font-bold flex items-center gap-2 animate-pulse">
-                <AlertCircle size={16} /> Use denominations of ₹100
+        {/* Left: Stats */}
+        <div className="col-span-1 md:col-span-2 flex flex-col justify-center space-y-4">
+            <div className="flex justify-between items-center">
+                <div className="text-slate-500 dark:text-slate-400 font-mono text-sm uppercase tracking-widest">Allocation Status</div>
+                {!isMultipleOf100 && !isLocked && (
+                    <div className="text-red-500 dark:text-red-400 text-xs font-bold flex items-center gap-1 animate-pulse">
+                        <AlertCircle size={14} /> Denominations of ₹100
+                    </div>
+                )}
             </div>
-        )}
 
-        {hasSubmitted ? (
-            <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500 font-bold animate-pulse">
-                <Lock size={16} /> BET PLACED. WAITING FOR MARKET CLOSE...
-            </div>
-        ) : (
-            <div className="flex items-center gap-4 mt-2 md:mt-0">
-                <div className={`font-mono font-bold text-xl ${remaining > 0 ? 'text-yellow-600 dark:text-yellow-400' : isValid ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                    {remaining > 0 ? `To Allocate: ₹${remaining}` : isValid ? 'Fully Allocated!' : 'Invalid Allocation'}
+            {hasSubmitted ? (
+                <div className="flex items-center gap-2 text-yellow-600 dark:text-yellow-500 font-bold animate-pulse text-lg">
+                    <Lock size={20} /> BET PLACED. MARKETS CLOSED.
                 </div>
-                <button
-                    onClick={onManualSubmit}
-                    disabled={!isValid || isLocked}
-                    className={`px-6 py-2 rounded-lg font-bold transition-all ${
-                        isValid && !isLocked
-                        ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105 hover-glow'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                    }`}
-                >
-                    SUBMIT BET
-                </button>
-            </div>
-        )}
+            ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className={`font-mono font-bold text-2xl transition-colors duration-300 ${remaining > 0 ? 'text-yellow-600 dark:text-yellow-400' : isValid ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                        {remaining > 0 ? `Unallocated: ₹${remaining}` : isValid ? 'Fully Allocated' : 'Invalid'}
+                    </div>
+                    <button
+                        onClick={onManualSubmit}
+                        disabled={!isValid || isLocked}
+                        className={`px-8 py-3 rounded-lg font-bold transition-all ${
+                            isValid && !isLocked
+                            ? 'bg-green-600 hover:bg-green-500 text-white shadow-lg shadow-green-900/20 scale-105 hover-glow'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                        }`}
+                    >
+                        SUBMIT BET
+                    </button>
+                </div>
+            )}
+        </div>
+
+        {/* Right: Visual Portfolio */}
+        <div className="flex h-24 items-center justify-center md:justify-end relative border-t border-slate-100 dark:border-slate-700 md:border-t-0 pt-4 md:pt-0">
+             {/* Text Overlay for Center of Donut */}
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none pr-4">
+                 <span className="text-[10px] font-mono uppercase text-slate-400">Portfolio</span>
+             </div>
+             <div className="w-full h-full max-w-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                        <Pie
+                            data={chartData}
+                            innerRadius={25}
+                            outerRadius={40}
+                            paddingAngle={2}
+                            dataKey="value"
+                            stroke="none"
+                        >
+                            {chartData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                        </Pie>
+                        <Tooltip 
+                            formatter={(value: number) => `₹${value}`}
+                            contentStyle={{ backgroundColor: '#1e293b', borderColor: '#334155', color: '#fff', fontSize: '12px' }}
+                            itemStyle={{ color: '#fff' }}
+                        />
+                    </PieChart>
+                </ResponsiveContainer>
+             </div>
+        </div>
       </div>
 
       {/* Quick Actions */}
       <div className={`grid grid-cols-2 md:grid-cols-4 gap-2 ${isLocked ? 'opacity-50 pointer-events-none' : ''}`}>
          <ActionButton 
             onClick={handleSplitEvenly} 
-            icon={PieChart}
+            icon={PieIcon}
             label="Spread (Even)"
             tooltip="Distribute available funds equally across all 4 options."
             className="flex items-center justify-center gap-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 p-2 rounded border border-slate-200 dark:border-slate-700 transition-colors text-sm text-slate-600 dark:text-slate-300"
@@ -326,36 +382,48 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
                             className={`w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer ${sliderColor}`}
                         />
                         
-                        <div className="flex gap-2">
+                        {/* Quick Percent Buttons */}
+                        <div className="grid grid-cols-4 gap-2 mb-2">
+                             {[0.25, 0.5, 0.75].map(pct => (
+                                 <button
+                                    key={pct}
+                                    onClick={() => handlePercentage(option, pct * 100)}
+                                    disabled={isLocked}
+                                    className="text-[10px] font-bold py-1 bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 rounded transition-colors"
+                                 >
+                                     {pct * 100}%
+                                 </button>
+                             ))}
                             <button 
                                 onClick={() => handleAllIn(option)}
                                 disabled={isLocked}
-                                className={`flex-1 text-xs font-bold py-1 px-2 rounded uppercase tracking-wider transition-colors disabled:opacity-50 hover-glow ${
+                                className={`text-[10px] font-bold py-1 rounded uppercase tracking-wider transition-colors disabled:opacity-50 hover-glow ${
                                     amount > 0 && percentage === 100 
                                     ? 'bg-red-600 text-white shadow-lg shadow-red-600/30' 
                                     : 'bg-indigo-100 dark:bg-indigo-600/20 hover:bg-indigo-200 dark:hover:bg-indigo-600/40 text-indigo-700 dark:text-indigo-300'
                                 }`}
                             >
-                                All In
+                                ALL-IN
                             </button>
-                            <div className={`flex items-center bg-white dark:bg-slate-900 rounded px-2 border focus-within:ring-1 focus-within:ring-indigo-500 focus-glow ${amount > 0 ? 'border-slate-300 dark:border-slate-700' : 'border-slate-300 dark:border-slate-700'}`}>
-                                <DollarSign size={14} className="text-slate-400 dark:text-slate-500" />
-                                <input
-                                    type="number"
-                                    step="100"
-                                    min="0"
-                                    max={balance}
-                                    value={allocations[option]}
-                                    disabled={isLocked}
-                                    onChange={(e) => {
-                                        const val = parseInt(e.target.value);
-                                        if (!isNaN(val)) {
-                                            updateAllocation(option, val);
-                                        }
-                                    }}
-                                    className="w-20 bg-transparent text-right font-mono text-sm focus:outline-none p-1 text-slate-900 dark:text-white disabled:text-slate-400"
-                                />
-                            </div>
+                        </div>
+
+                        <div className={`flex items-center bg-white dark:bg-slate-900 rounded px-2 border focus-within:ring-1 focus-within:ring-indigo-500 focus-glow ${amount > 0 ? 'border-slate-300 dark:border-slate-700' : 'border-slate-300 dark:border-slate-700'}`}>
+                            <DollarSign size={14} className="text-slate-400 dark:text-slate-500" />
+                            <input
+                                type="number"
+                                step="100"
+                                min="0"
+                                max={balance}
+                                value={allocations[option]}
+                                disabled={isLocked}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    if (!isNaN(val)) {
+                                        updateAllocation(option, val);
+                                    }
+                                }}
+                                className="w-full bg-transparent text-right font-mono text-sm focus:outline-none p-1 text-slate-900 dark:text-white disabled:text-slate-400"
+                            />
                         </div>
                     </div>
                     
