@@ -298,7 +298,7 @@ const App: React.FC = () => {
         {renderContent()}
         {/* Persistent Footer */}
         <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 py-2 text-center text-xs font-mono uppercase tracking-[0.2em] z-50 border-t border-slate-800 shadow-lg">
-            The QuizMasterz wish you luck
+            The QuizMasters wish you luck
         </div>
       </>
   );
