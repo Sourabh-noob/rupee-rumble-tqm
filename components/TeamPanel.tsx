@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Allocations, Team } from '../types';
 import { DollarSign, Lock } from 'lucide-react';
@@ -19,16 +20,19 @@ const TeamPanel: React.FC<TeamPanelProps> = ({
   showResult,
   correctAnswer
 }) => {
-  const allocatedTotal = Object.values(allocations).reduce((a, b) => a + b, 0);
+  // FIX: Cast Object.values to number[] to ensure 'a' and 'b' are numbers in reduce
+  const allocatedTotal = (Object.values(allocations) as number[]).reduce((a: number, b: number) => a + b, 0);
   const remaining = team.balance - allocatedTotal;
   const isValid = allocatedTotal === team.balance;
 
   const updateAllocation = (option: keyof Allocations, value: number) => {
     if (isLocked) return;
     let newValue = Math.max(0, Math.min(team.balance, value));
-    const otherSum = Object.entries(allocations)
+    
+    // FIX: Cast Object.entries to ensure 'val' is treated as a number
+    const otherSum = (Object.entries(allocations) as [string, number][])
       .filter(([key]) => key !== option)
-      .reduce((sum, [, val]) => sum + val, 0);
+      .reduce((sum: number, [, val]) => sum + val, 0);
       
     if (newValue + otherSum > team.balance) {
         newValue = team.balance - otherSum;

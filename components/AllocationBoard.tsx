@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Allocations, Question } from '../types';
 import { DollarSign, Trash2, PieChart as PieIcon, Layers, AlertCircle, Lock, LucideIcon, Shield, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -65,7 +66,8 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
 
   // Recalculate total whenever individual allocations change
   useEffect(() => {
-    const total = Object.values(allocations).reduce((sum: number, val: number) => sum + val, 0);
+    // FIX: Cast Object.values to number[] to avoid 'unknown' type in reduce
+    const total = (Object.values(allocations) as number[]).reduce((sum: number, val: number) => sum + val, 0);
     setAllocatedTotal(total);
   }, [allocations]);
 
@@ -76,9 +78,10 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
     let newValue = Math.max(0, Math.min(balance, value));
     
     // Ensure we don't exceed balance with other buckets
-    const otherSum = Object.entries(allocations)
+    // FIX: Cast Object.entries to ensure 'val' is treated as a number
+    const otherSum = (Object.entries(allocations) as [string, number][])
       .filter(([key]) => key !== option)
-      .reduce((sum: number, [, val]) => sum + (val as number), 0);
+      .reduce((sum: number, [, val]) => sum + val, 0);
       
     if (newValue + otherSum > balance) {
         newValue = balance - otherSum;
@@ -153,7 +156,8 @@ const AllocationBoard: React.FC<AllocationBoardProps> = ({
 
   const remaining = balance - allocatedTotal;
   const isComplete = allocatedTotal === balance;
-  const isMultipleOf100 = Object.values(allocations).every(val => val % 100 === 0);
+  // FIX: Cast Object.values to number[] to avoid 'unknown' type in arithmetic operation %
+  const isMultipleOf100 = (Object.values(allocations) as number[]).every(val => val % 100 === 0);
   const isValid = isComplete && isMultipleOf100;
   
   // Interaction disabled if timer stopped OR if already submitted
