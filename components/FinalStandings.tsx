@@ -19,7 +19,7 @@ const FinalStandings: React.FC<FinalStandingsProps> = ({ team, onRestart }) => {
 
   const finalBalance = team.balance;
   const roundsPlayed = team.history.length;
-  const maxRounds = 5;
+  const maxRounds = 6;
   const isBankrupt = finalBalance === 0;
 
   return (

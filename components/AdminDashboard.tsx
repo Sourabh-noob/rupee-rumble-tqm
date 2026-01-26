@@ -84,7 +84,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Sidebar: Round Selector */}
                 <div className="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 overflow-y-auto">
                     <div className="p-4 font-bold text-xs text-slate-400 uppercase tracking-wider">Select Round</div>
-                    {[1, 2, 3, 4, 5].map(r => (
+                    {[1, 2, 3, 4, 5, 6].map(r => (
                         <button
                             key={r}
                             onClick={() => setSelectedRound(r)}
@@ -188,8 +188,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <div className="p-8 space-y-8">
                         <div className="space-y-4">
                             <label className="text-sm font-bold text-slate-400 uppercase tracking-wider block">Target Round</label>
-                            <div className="grid grid-cols-5 gap-2">
-                                {[1, 2, 3, 4, 5].map(r => (
+                            <div className="grid grid-cols-6 gap-2">
+                                {[1, 2, 3, 4, 5, 6].map(r => (
                                     <button
                                         key={r}
                                         onClick={() => setLiveRound(r)}
