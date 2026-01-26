@@ -204,6 +204,10 @@ const App: React.FC = () => {
       const currentQuestion = questions[currentRoundIndex];
 
       if (gameState === GameState.PLAYING && team && currentQuestion) {
+          // Calculate round progress
+          const roundQs = questions.filter(q => q.roundNumber === currentQuestion.roundNumber);
+          const totalInRound = roundQs.length;
+
           return (
             <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12">
                 {/* Header */}
@@ -223,7 +227,7 @@ const App: React.FC = () => {
                         <div className="flex items-center gap-4">
                             <div className="hidden md:block text-right">
                                 <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
-                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
+                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / {totalInRound}</div>
                             </div>
                             <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover-glow rounded-full">
                                 {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
