@@ -52,6 +52,40 @@ const App: React.FC = () => {
     });
   }, []);
 
+  // --- Anti-Cheating Logic ---
+  useEffect(() => {
+    // Disable copying and right-clicking only during active gameplay
+    if (gameState === GameState.PLAYING) {
+      const handleCopy = (e: ClipboardEvent) => {
+        e.preventDefault();
+      };
+      const handleContextMenu = (e: MouseEvent) => {
+        e.preventDefault();
+      };
+      const handleDragStart = (e: DragEvent) => {
+        e.preventDefault();
+      };
+      const handleKeyDown = (e: KeyboardEvent) => {
+        // Block Ctrl+C, Cmd+C (Copy), Ctrl+A, Cmd+A (Select All)
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C' || e.key === 'a' || e.key === 'A')) {
+          e.preventDefault();
+        }
+      };
+
+      window.addEventListener('copy', handleCopy);
+      window.addEventListener('contextmenu', handleContextMenu);
+      window.addEventListener('dragstart', handleDragStart);
+      window.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        window.removeEventListener('copy', handleCopy);
+        window.removeEventListener('contextmenu', handleContextMenu);
+        window.removeEventListener('dragstart', handleDragStart);
+        window.removeEventListener('keydown', handleKeyDown);
+      };
+    }
+  }, [gameState]);
+
   // --- Handlers ---
 
   const handleJoin = async (newTeam: Team) => {
@@ -82,11 +116,6 @@ const App: React.FC = () => {
         setHasSubmitted(false);
         setShowResult(false);
         setIsTimerActive(true);
-        
-        // Note: We do NOT force the view to change to PLAYING here.
-        // The Admin stays in dashboard. If a team is logged in (on this or another synchronized client), 
-        // they will see the new round content because currentRoundIndex is updated.
-        // For single-browser demo, if the user is in Admin, they stay in Admin.
     }
   };
 
@@ -209,7 +238,7 @@ const App: React.FC = () => {
           const totalInRound = roundQs.length;
 
           return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12">
+            <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12 select-none`}>
                 {/* Header */}
                 <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
                     <div className="max-w-7xl mx-auto flex justify-between items-center">
