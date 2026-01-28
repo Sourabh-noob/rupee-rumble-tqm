@@ -1,9 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Provided credentials to fix the "supabaseUrl is required" error.
-// These allow the application to initialize the real-time backend connection.
+// Updated credentials provided by the user to fix initialization errors.
 const supabaseUrl = 'https://aobrusvteubxubtwchro.supabase.co';
-const supabaseAnonKey = 'sb_publishable_YL6Fml2fjCsZcmrHymaN-g_BArS_J7I';
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFvYnJ1c3Z0ZXVieHVidHdjaHJvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2MTc0MjcsImV4cCI6MjA4NTE5MzQyN30.kYGNwLI2-suGj88htwgv4BhOQGi133D8mn0t47ktmGo';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
