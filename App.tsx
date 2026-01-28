@@ -41,7 +41,7 @@ const App: React.FC = () => {
 
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence for a high-stakes trading game.`,
@@ -70,7 +70,6 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Non-blocking sync to Supabase
     supabase.from('teams').upsert({
       id: updatedTeam.id,
       name: updatedTeam.name,
@@ -78,7 +77,7 @@ const App: React.FC = () => {
       balance: updatedTeam.balance,
       history: updatedTeam.history
     }).then(({ error }) => {
-      if (error) console.warn("Leaderboard sync failed:", error.message);
+      if (error) console.warn("Sync warning:", error.message);
     });
     
     if (soundEnabled) {
@@ -114,13 +113,7 @@ const App: React.FC = () => {
       });
       
       if (error) {
-        if (error.message.includes("column") || error.message.includes("cache")) {
-           alert(`DATABASE ERROR: Your Supabase table is missing columns. 
-           
-Please log in as Director and run the SQL in the "Setup" tab.`);
-        } else {
-           alert("Failed to join exchange: " + error.message);
-        }
+        alert("Exchange Connection Error: Your database table is likely out of date. Ask the Director to run the SQL in the 'Setup' tab.");
         return;
       }
 
@@ -128,7 +121,7 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
       setGameState(GameState.PLAYING);
       setStartBalance(newTeam.balance);
     } catch (err: any) {
-      console.warn("Join failed:", err.message);
+      console.error("Join error:", err);
     }
   };
 
@@ -144,34 +137,28 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
     }
   };
 
+  // ONE-TIME INITIALIZATION
   useEffect(() => {
     const initApp = async () => {
       try {
-        // Load default questions first to be safe
+        // Force set local questions first so UI has something to show
         const localQs = await generateGameQuestions();
         setQuestions(localQs);
 
-        // Try to fetch from Supabase
+        // Then try to fetch remote data
         const { data: dbQs } = await supabase.from('questions').select('*');
         if (dbQs && dbQs.length > 0) {
-          const mapped = dbQs.map(q => ({
+          setQuestions(dbQs.map(q => ({
             id: q.id,
             roundNumber: q.round_number,
             questionNumber: q.question_number,
             text: q.text,
             options: q.options,
             correctAnswer: q.correct_answer
-          }));
-          setQuestions(mapped);
+          })));
         }
         
-        // Load state
-        const { data: stateData } = await supabase
-          .from('game_state')
-          .select('*')
-          .eq('id', GAME_STATE_ID)
-          .maybeSingle(); 
-        
+        const { data: stateData } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
         if (stateData) {
             setCurrentRoundIndex(stateData.current_round_index || 0);
             setIsTimerActive(!!stateData.is_timer_active);
@@ -179,22 +166,19 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
             setShowLeaderboard(!!stateData.show_leaderboard);
             setTimerDuration(stateData.timer_duration || 40);
         }
-      } catch (err: any) {
-        console.warn("Init non-fatal error:", err.message);
+      } catch (err) {
+        console.error("Critical Init Error:", err);
       } finally {
+        // ALWAYS hide loader, no matter what
         setIsAppLoading(false);
       }
     };
 
     initApp();
 
-    const channel = supabase.channel('room-1')
-        .on('postgres_changes', { 
-            event: 'UPDATE', 
-            schema: 'public', 
-            table: 'game_state', 
-            filter: `id=eq.${GAME_STATE_ID}` 
-        }, (payload) => {
+    // Subscribe to state updates
+    const channel = supabase.channel('global-state')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `id=eq.${GAME_STATE_ID}` }, (payload) => {
             const newState = payload.new as RemoteGameState;
             if (!newState) return;
             
@@ -205,7 +189,7 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
                     setHasSubmitted(false);
                     setMarketCommentary("");
                     setShowResult(false);
-                    if (gameState === GameState.GAME_OVER) setGameState(GameState.PLAYING);
+                    setGameState(curr => curr === GameState.GAME_OVER ? GameState.PLAYING : curr);
                 }
                 return newState.current_round_index;
               });
@@ -219,7 +203,7 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
         .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
     return () => { supabase.removeChannel(channel); };
-  }, [gameState]);
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
@@ -230,15 +214,6 @@ Please log in as Director and run the SQL in the "Setup" tab.`);
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
       <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
       <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.3em]">Connecting to Exchange...</p>
-    </div>
-  );
-
-  if (initError) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 text-center">
-      <AlertCircle className="h-16 w-16 text-red-500 mb-6" />
-      <h2 className="text-2xl font-display font-bold mb-2 text-white">CONNECTION TERMINATED</h2>
-      <p className="text-slate-400 mb-8 max-w-sm mx-auto font-mono text-xs">{initError}</p>
-      <button onClick={() => window.location.reload()} className="bg-white text-black font-black px-10 py-4 rounded-full">REBOOT</button>
     </div>
   );
 
