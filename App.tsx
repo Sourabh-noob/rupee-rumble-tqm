@@ -70,11 +70,8 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Non-blocking sync to Supabase
-    supabase.from('teams').upsert({
-      ...updatedTeam,
-      last_active: new Date().toISOString()
-    }).then(({ error }) => {
+    // Non-blocking sync to Supabase (Removed last_active to fix schema error)
+    supabase.from('teams').upsert(updatedTeam).then(({ error }) => {
       if (error) console.error("Leaderboard sync failed:", error.message);
     });
     
@@ -93,29 +90,30 @@ const App: React.FC = () => {
   }, []);
 
   const handleJoin = async (newTeam: Team) => {
-    // Return the promise so EntryScreen can show a loading state
     return new Promise<void>(async (resolve, reject) => {
       try {
+        // Fix: Removed 'last_active' as it caused schema cache errors in Supabase
         const { error } = await supabase.from('teams').upsert({
-          ...newTeam,
-          last_active: new Date().toISOString()
+          id: newTeam.id,
+          name: newTeam.name,
+          members: newTeam.members,
+          balance: newTeam.balance,
+          history: newTeam.history
         });
         
         if (error) {
           console.error("Supabase Join Error:", error.message);
-          alert("Failed to join exchange: " + error.message);
+          alert("Failed to join exchange: " + error.message + ". Please ensure the 'teams' table exists and has columns: id, name, members, balance, history.");
           reject(error);
           return;
         }
 
-        // Only transition locally after confirming the database received the team
         setTeam(newTeam);
         setGameState(GameState.PLAYING);
         setStartBalance(newTeam.balance);
         resolve();
       } catch (err: any) {
         console.warn("Could not register team in central database.", err.message);
-        // Fallback for demo if needed, but here we want robustness
         reject(err);
       }
     });
