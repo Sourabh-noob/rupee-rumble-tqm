@@ -47,7 +47,7 @@ const App: React.FC = () => {
       });
       setMarketCommentary(response.text || "");
     } catch (e) {
-      console.error(e);
+      console.error("Commentary Error:", e);
     }
   };
 
@@ -70,7 +70,9 @@ const App: React.FC = () => {
     setTeam(updatedTeam);
     
     // Sync to Supabase
-    supabase.from('teams').upsert(updatedTeam).then();
+    supabase.from('teams').upsert(updatedTeam).then(({ error }) => {
+      if (error) console.error("Sync Error:", error);
+    });
     
     if (soundEnabled) {
         if (keptAmount >= currentTeam.balance && currentTeam.balance > 0) playSound('profit'); 
@@ -91,9 +93,9 @@ const App: React.FC = () => {
     setGameState(GameState.PLAYING);
     setStartBalance(newTeam.balance);
     
-    // CRITICAL: Immediately sync to Supabase so the leaderboard sees the team
+    // Immediately sync to Supabase
     const { error } = await supabase.from('teams').upsert(newTeam);
-    if (error) console.error("Error syncing team on join:", error);
+    if (error) console.error("Join Sync Error:", error);
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
@@ -114,16 +116,21 @@ const App: React.FC = () => {
         const qs = await generateGameQuestions();
         setQuestions(qs);
         
+        // Use maybeSingle to prevent error if table is empty
         const { data, error } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
-        if (data && !error) {
-            setCurrentRoundIndex(data.current_round_index);
-            setIsTimerActive(data.is_timer_active);
-            setShowResult(data.show_result);
-            setShowLeaderboard(data.show_leaderboard);
+        
+        if (data) {
+            setCurrentRoundIndex(data.current_round_index || 0);
+            setIsTimerActive(!!data.is_timer_active);
+            setShowResult(!!data.show_result);
+            setShowLeaderboard(!!data.show_leaderboard);
             setTimerDuration(data.timer_duration || 40);
+        } else if (error) {
+            console.error("Supabase Init Error:", error);
         }
       } catch (err) {
-        setInitError("Connectivity issues.");
+        console.error("InitApp Catch:", err);
+        setInitError("Market connectivity issues. Please check your Supabase configuration.");
       } finally {
         setIsAppLoading(false);
       }
@@ -131,7 +138,7 @@ const App: React.FC = () => {
 
     initApp();
 
-    const channel = supabase.channel('room-primary')
+    const channel = supabase.channel(`game-state-${Date.now()}`)
         .on('postgres_changes', { 
             event: 'UPDATE', 
             schema: 'public', 
@@ -139,8 +146,10 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
+            console.log("State Update Received:", newState);
             
-            setCurrentRoundIndex(prev => {
+            if (newState.current_round_index !== undefined) {
+              setCurrentRoundIndex(prev => {
                 if (newState.current_round_index !== prev) {
                     setAllocations({ A: 0, B: 0, C: 0, D: 0 });
                     setHasSubmitted(false);
@@ -148,17 +157,21 @@ const App: React.FC = () => {
                     setShowResult(false);
                 }
                 return newState.current_round_index;
-            });
+              });
+            }
 
-            setIsTimerActive(!!newState.is_timer_active);
-            setShowResult(!!newState.show_result);
-            setShowLeaderboard(!!newState.show_leaderboard);
-            if (newState.timer_duration) setTimerDuration(newState.timer_duration);
+            if (newState.is_timer_active !== undefined) setIsTimerActive(!!newState.is_timer_active);
+            if (newState.show_result !== undefined) setShowResult(!!newState.show_result);
+            if (newState.show_leaderboard !== undefined) setShowLeaderboard(!!newState.show_leaderboard);
+            if (newState.timer_duration !== undefined) setTimerDuration(newState.timer_duration);
         })
-        .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
+        .subscribe((status) => {
+          console.log("Subscription status:", status);
+          setIsConnected(status === 'SUBSCRIBED');
+        });
 
     return () => { supabase.removeChannel(channel); };
-  }, [questions.length]);
+  }, []); // Run only once on mount
 
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
@@ -168,15 +181,16 @@ const App: React.FC = () => {
   if (isAppLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
       <Loader2 className="animate-spin h-10 w-10 text-indigo-500 mb-4" />
-      <p className="text-slate-500 font-mono text-xs">MARKET OPENING...</p>
+      <p className="text-slate-500 font-mono text-xs uppercase tracking-[0.2em]">Initialising Market Terminals...</p>
     </div>
   );
 
   if (initError) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-center">
       <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-      <h2 className="text-xl font-bold mb-4 text-white">{initError}</h2>
-      <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-8 py-3 rounded-xl">Retry</button>
+      <h2 className="text-xl font-bold mb-4 text-white">System Fault</h2>
+      <p className="text-slate-400 mb-6 max-w-sm mx-auto">{initError}</p>
+      <button onClick={() => window.location.reload()} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg">Retry Connection</button>
     </div>
   );
 
@@ -188,7 +202,8 @@ const App: React.FC = () => {
   if (!team || !currentQuestion) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-          <p className="text-slate-500">Wait for the Host to launch a round...</p>
+          <Loader2 className="animate-spin h-6 w-6 text-slate-700 mb-4" />
+          <p className="text-slate-500 font-mono text-[10px] uppercase tracking-widest">Awaiting Market Launch Signal...</p>
         </div>
       );
   }
@@ -203,9 +218,9 @@ const App: React.FC = () => {
                 <h2 className="font-bold text-slate-900 dark:text-white truncate max-w-[120px]">₹{team.balance}</h2>
             </div>
             <div className="flex gap-1 items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
-                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`}></div>
+                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
             </div>
         </header>
 
@@ -219,7 +234,7 @@ const App: React.FC = () => {
                 <div className="space-y-6">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col md:flex-row gap-6 items-center">
                         <div className="flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Live Trade</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Global Exchange Round</span>
                             <h3 className="text-xl md:text-3xl font-display font-bold text-slate-900 dark:text-white mt-1 leading-tight">{currentQuestion.text}</h3>
                         </div>
                         <Timer key={`${currentRoundIndex}-${isTimerActive}`} duration={timerDuration} isActive={isTimerActive} onTimeUp={handleTimeUp} soundEnabled={soundEnabled} />
@@ -228,7 +243,7 @@ const App: React.FC = () => {
                 </div>
             )}
         </main>
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-700 py-1 text-[7px] font-mono text-center z-50 tracking-[0.4em] uppercase">Rupee Rumble • Market Connected</div>
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-700 py-1 text-[7px] font-mono text-center z-50 tracking-[0.4em] uppercase">Rupee Rumble • Verified Secure Connection</div>
     </div>
   );
 };
