@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Question, Team } from '../types';
-import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check } from 'lucide-react';
+import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check, Edit3 } from 'lucide-react';
 import { supabase, GAME_STATE_ID } from '../services/supabaseService';
 
 interface AdminDashboardProps {
@@ -25,6 +25,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [selectedRound, setSelectedRound] = useState(1);
   const [localQuestions, setLocalQuestions] = useState<Question[]>(JSON.parse(JSON.stringify(questions)));
   const [saveMessage, setSaveMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
   const [liveRound, setLiveRound] = useState(1);
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -34,7 +35,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [copied, setCopied] = useState(false);
 
   const sqlSchema = `-- RUN THIS IN YOUR SUPABASE SQL EDITOR TO FIX SCHEMA ERRORS
--- This ensures all required columns (id, name, members, balance, history) exist.
+-- This ensures all required tables (teams, game_state, questions) exist.
 
 CREATE TABLE IF NOT EXISTS teams (
   id TEXT PRIMARY KEY,
@@ -52,6 +53,15 @@ CREATE TABLE IF NOT EXISTS game_state (
   show_result BOOLEAN DEFAULT FALSE,
   show_leaderboard BOOLEAN DEFAULT FALSE,
   timer_duration INT DEFAULT 40
+);
+
+CREATE TABLE IF NOT EXISTS questions (
+  id TEXT PRIMARY KEY,
+  round_number INT NOT NULL,
+  question_number INT NOT NULL,
+  text TEXT NOT NULL,
+  options JSONB NOT NULL,
+  correct_answer TEXT NOT NULL
 );
 
 -- Ensure the initial game state exists
@@ -121,10 +131,43 @@ ON CONFLICT (id) DO NOTHING;`;
     }
   };
 
-  const handleSave = () => {
-    setQuestions(localQuestions);
-    setSaveMessage('Saved!');
-    setTimeout(() => setSaveMessage(''), 2000);
+  const handleQuestionChange = (id: string, field: string, value: any, optionKey?: string) => {
+    setLocalQuestions(prev => prev.map(q => {
+      if (q.id !== id) return q;
+      if (field === 'options' && optionKey) {
+        return { ...q, options: { ...q.options, [optionKey]: value } };
+      }
+      return { ...q, [field]: value };
+    }));
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage('');
+    try {
+      // Map local state to database schema
+      const dbPayload = localQuestions.map(q => ({
+        id: q.id,
+        round_number: q.roundNumber,
+        question_number: q.questionNumber,
+        text: q.text,
+        options: q.options,
+        correct_answer: q.correctAnswer
+      }));
+
+      const { error } = await supabase.from('questions').upsert(dbPayload);
+      
+      if (error) throw error;
+
+      setQuestions(localQuestions);
+      setSaveMessage('Bank Updated Successfully!');
+      setTimeout(() => setSaveMessage(''), 3000);
+    } catch (err: any) {
+      console.error("Save error:", err);
+      alert("Failed to sync questions: " + err.message + "\n\nTip: Ensure you ran the SQL in the Setup tab to create the 'questions' table.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const roundQuestions = localQuestions.filter(q => q.roundNumber === selectedRound).sort((a,b) => a.questionNumber - b.questionNumber);
@@ -177,7 +220,7 @@ ON CONFLICT (id) DO NOTHING;`;
                    <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
                       <Database className="text-rose-500" /> Database Synchronization
                    </h2>
-                   <p className="text-sm text-slate-500 max-w-2xl">If you are seeing "column not found" errors, your Supabase table schema needs to be updated. Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
+                   <p className="text-sm text-slate-500 max-w-2xl">If you are seeing "column not found" errors or the Editor fails to save, your Supabase table schema needs to be updated. Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
                 </div>
                 
                 <div className="relative group">
@@ -191,31 +234,96 @@ ON CONFLICT (id) DO NOTHING;`;
                       {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy SQL</>}
                    </button>
                 </div>
-
-                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 p-6 rounded-2xl flex items-start gap-4">
-                   <AlertTriangle className="text-amber-500 shrink-0 mt-1" />
-                   <div>
-                      <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm">Deployment Note</h4>
-                      <p className="text-xs text-amber-800/70 dark:text-amber-300/60 mt-1">Running this script will not delete existing data if use "IF NOT EXISTS", but it will ensure the columns 'members', 'balance', and 'history' are available for the application to function correctly.</p>
-                   </div>
-                </div>
              </div>
           </div>
         )}
 
         {activeTab === 'editor' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 px-6 flex justify-between items-center shadow-sm">
+              <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                {[1, 2, 3, 4, 5, 6].map(r => (
+                  <button 
+                    key={r}
+                    onClick={() => setSelectedRound(r)}
+                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${selectedRound === r ? 'bg-indigo-600 text-white shadow-lg' : 'bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600'}`}
+                  >
+                    Round {r}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-4">
+                {saveMessage && <span className="text-[10px] font-black text-green-500 animate-pulse">{saveMessage}</span>}
+                <button 
+                  onClick={handleSave} 
+                  disabled={isSaving}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-600/20 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                  PERSIST TO DATABASE
+                </button>
+              </div>
+            </div>
+            
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
-               <div className="max-w-3xl mx-auto space-y-6">
-                 <h2 className="text-xl font-black">Question Bank</h2>
+               <div className="max-w-4xl mx-auto space-y-8 pb-20">
                  {roundQuestions.map(q => (
-                   <div key={q.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
-                     <p className="text-xs font-mono text-indigo-500 mb-2">PHASE {q.questionNumber}</p>
-                     <p className="font-bold">{q.text}</p>
+                   <div key={q.id} className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
+                      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black">
+                            {q.questionNumber}
+                          </div>
+                          <h3 className="text-sm font-black uppercase tracking-widest">Phase {q.questionNumber}</h3>
+                        </div>
+                        <div className="flex items-center gap-3">
+                           <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Correct:</span>
+                           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                              {(['A', 'B', 'C', 'D'] as const).map(ans => (
+                                <button 
+                                  key={ans} 
+                                  onClick={() => handleQuestionChange(q.id, 'correctAnswer', ans)}
+                                  className={`w-8 h-8 rounded-md text-[10px] font-black transition-all ${q.correctAnswer === ans ? 'bg-green-500 text-white shadow-md' : 'text-slate-400 hover:bg-slate-200'}`}
+                                >
+                                  {ans}
+                                </button>
+                              ))}
+                           </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Question Prompt</label>
+                        <textarea 
+                          value={q.text} 
+                          onChange={(e) => handleQuestionChange(q.id, 'text', e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all text-slate-900 dark:text-white resize-none"
+                          rows={3}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {(['A', 'B', 'C', 'D'] as const).map(opt => (
+                          <div key={opt} className="space-y-2">
+                             <div className="flex justify-between items-center px-1">
+                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Option {opt}</label>
+                             </div>
+                             <div className="flex items-center gap-2">
+                               <input 
+                                  type="text" 
+                                  value={q.options[opt]} 
+                                  onChange={(e) => handleQuestionChange(q.id, 'options', e.target.value, opt)}
+                                  className={`w-full bg-slate-50 dark:bg-slate-800/50 border rounded-xl p-3 text-[11px] font-bold focus:outline-none transition-all ${q.correctAnswer === opt ? 'border-green-500 ring-1 ring-green-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500'}`}
+                                />
+                             </div>
+                          </div>
+                        ))}
+                      </div>
                    </div>
                  ))}
-                 <button onClick={handleSave} className="bg-indigo-600 text-white px-8 py-3 rounded-xl font-bold">Save All</button>
                </div>
             </div>
+          </div>
         )}
 
         {activeTab === 'roster' && (

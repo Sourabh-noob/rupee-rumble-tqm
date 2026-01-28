@@ -70,7 +70,7 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Non-blocking sync to Supabase (Omit last_active to avoid common schema errors)
+    // Sync to Supabase
     supabase.from('teams').upsert({
       id: updatedTeam.id,
       name: updatedTeam.name,
@@ -107,12 +107,10 @@ const App: React.FC = () => {
         });
         
         if (error) {
-          console.error("Supabase Join Error:", error.message);
-          // High-visibility error handling for schema issues
           if (error.message.includes("column") || error.message.includes("cache")) {
              alert(`DATABASE SCHEMA ERROR: The column "${error.message.split('"')[1]}" could not be found. 
              
-Please log in as Director and go to the "Setup" tab to get the SQL script required to fix your Supabase tables.`);
+Please log in as Director and go to the "Setup" tab to fix your Supabase tables.`);
           } else {
              alert("Failed to join exchange: " + error.message);
           }
@@ -146,24 +144,56 @@ Please log in as Director and go to the "Setup" tab to get the SQL script requir
   useEffect(() => {
     const initApp = async () => {
       try {
-        const qs = await generateGameQuestions();
-        if (!qs || qs.length === 0) throw new Error("Question bank is empty.");
-        setQuestions(qs);
+        // 1. Try to fetch questions from Supabase first
+        const { data: dbQs, error: qError } = await supabase.from('questions').select('*');
         
-        const { data, error } = await supabase
+        let finalQs: Question[] = [];
+        
+        if (dbQs && dbQs.length > 0) {
+          // Map DB format to local interface
+          finalQs = dbQs.map(q => ({
+            id: q.id,
+            roundNumber: q.round_number,
+            questionNumber: q.question_number,
+            text: q.text,
+            options: q.options,
+            correctAnswer: q.correct_answer
+          }));
+          console.log("Loaded questions from database.");
+        } else {
+          // 2. Fallback to hardcoded questions if DB is empty or fails
+          console.warn("No questions found in database. Using local defaults.");
+          finalQs = await generateGameQuestions();
+          
+          // Optionally seed the database if it's the first run (silent)
+          if (!qError) {
+             const seed = finalQs.map(q => ({
+                id: q.id,
+                round_number: q.roundNumber,
+                question_number: q.questionNumber,
+                text: q.text,
+                options: q.options,
+                correct_answer: q.correctAnswer
+             }));
+             supabase.from('questions').upsert(seed).then();
+          }
+        }
+        
+        setQuestions(finalQs);
+        
+        // 3. Load Remote Game State
+        const { data: stateData } = await supabase
           .from('game_state')
           .select('*')
           .eq('id', GAME_STATE_ID)
           .maybeSingle(); 
         
-        if (data) {
-            setCurrentRoundIndex(data.current_round_index || 0);
-            setIsTimerActive(!!data.is_timer_active);
-            setShowResult(!!data.show_result);
-            setShowLeaderboard(!!data.show_leaderboard);
-            setTimerDuration(data.timer_duration || 40);
-        } else if (error) {
-            console.warn("Supabase initial state fetch failed:", error.message);
+        if (stateData) {
+            setCurrentRoundIndex(stateData.current_round_index || 0);
+            setIsTimerActive(!!stateData.is_timer_active);
+            setShowResult(!!stateData.show_result);
+            setShowLeaderboard(!!stateData.show_leaderboard);
+            setTimerDuration(stateData.timer_duration || 40);
         }
       } catch (err: any) {
         console.error("Initialization Critical Error:", err);
@@ -212,28 +242,24 @@ Please log in as Director and go to the "Setup" tab to get the SQL script requir
   }, []);
 
   useEffect(() => {
+    if (isDarkMode) document.documentElement.classList.add('class'); // ensure tailwind mode
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
   if (isAppLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-      <div className="relative">
-        <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
-        <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse"></div>
-      </div>
+      <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
       <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.3em]">Connecting to Exchange...</p>
     </div>
   );
 
   if (initError) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 text-center">
-      <AlertCircle className="h-16 w-16 text-red-500 mb-6 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+      <AlertCircle className="h-16 w-16 text-red-500 mb-6" />
       <h2 className="text-2xl font-display font-bold mb-2 text-white">CONNECTION TERMINATED</h2>
       <p className="text-slate-400 mb-8 max-w-sm mx-auto font-mono text-xs">{initError}</p>
-      <button onClick={() => window.location.reload()} className="bg-white text-black font-black px-10 py-4 rounded-full transition-all hover:bg-slate-200 active:scale-95 shadow-2xl">
-        REBOOT TERMINAL
-      </button>
+      <button onClick={() => window.location.reload()} className="bg-white text-black font-black px-10 py-4 rounded-full">REBOOT</button>
     </div>
   );
 
@@ -257,14 +283,14 @@ Please log in as Director and go to the "Setup" tab to get the SQL script requir
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-40 flex justify-between items-center shadow-xl">
             <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">{team.name ? team.name.charAt(0) : '?'}</div>
+                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black">{team.name ? team.name.charAt(0) : '?'}</div>
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Portfolio Value</span>
                   <h2 className="font-mono font-black text-slate-900 dark:text-white leading-none">₹{team.balance || 0}</h2>
                 </div>
             </div>
             <div className="flex gap-2 items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></div>
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`}></div>
                 <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
             </div>
