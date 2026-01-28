@@ -10,17 +10,19 @@ import Leaderboard from './components/Leaderboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
 import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseService';
-import { Sun, Moon, Volume2, VolumeX, Loader2, AlertCircle } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
 import { playSound } from './utils/sound';
 import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
+  // 1. Initialize with local questions immediately to prevent white screen
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [timerDuration, setTimerDuration] = useState(40);
-  const [questions, setQuestions] = useState<Question[]>([]);
   const [team, setTeam] = useState<Team | null>(null);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [allocations, setAllocations] = useState<Allocations>({ A: 0, B: 0, C: 0, D: 0 });
@@ -29,9 +31,8 @@ const App: React.FC = () => {
   const [showResult, setShowResult] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [startBalance, setStartBalance] = useState(1000);
-  const [isAppLoading, setIsAppLoading] = useState(true);
-  const [initError, setInitError] = useState<string | null>(null);
   const [marketCommentary, setMarketCommentary] = useState<string>("");
+  const [showEmergencyLink, setShowEmergencyLink] = useState(false);
 
   const stateRef = useRef({ team, allocations, currentRoundIndex, questions });
   
@@ -41,7 +42,8 @@ const App: React.FC = () => {
 
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      if (!process.env.API_KEY) return;
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence for a high-stakes trading game.`,
@@ -75,9 +77,9 @@ const App: React.FC = () => {
       name: updatedTeam.name,
       members: updatedTeam.members,
       balance: updatedTeam.balance,
-      history: updatedTeam.history
+      history: updatedHistory
     }).then(({ error }) => {
-      if (error) console.warn("Sync warning:", error.message);
+      if (error) console.warn("Supabase Sync Warning:", error.message);
     });
     
     if (soundEnabled) {
@@ -113,8 +115,7 @@ const App: React.FC = () => {
       });
       
       if (error) {
-        alert("Exchange Connection Error: Your database table is likely out of date. Ask the Director to run the SQL in the 'Setup' tab.");
-        return;
+        alert("Database Sync Error: Please tell the Director to run the SQL fix in the 'Setup' tab of the console.");
       }
 
       setTeam(newTeam);
@@ -122,6 +123,10 @@ const App: React.FC = () => {
       setStartBalance(newTeam.balance);
     } catch (err: any) {
       console.error("Join error:", err);
+      // Fallback to local join if DB fails
+      setTeam(newTeam);
+      setGameState(GameState.PLAYING);
+      setStartBalance(newTeam.balance);
     }
   };
 
@@ -137,15 +142,18 @@ const App: React.FC = () => {
     }
   };
 
-  // ONE-TIME INITIALIZATION
+  // INITIALIZATION EFFECT - Non-blocking
   useEffect(() => {
+    const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 3000);
+
     const initApp = async () => {
       try {
-        // Force set local questions first so UI has something to show
+        // Step 1: Immediately load local questions so user sees a screen
         const localQs = await generateGameQuestions();
         setQuestions(localQs);
+        setIsAppLoading(false); // Hide loader as soon as local data is ready
 
-        // Then try to fetch remote data
+        // Step 2: Background sync with Supabase
         const { data: dbQs } = await supabase.from('questions').select('*');
         if (dbQs && dbQs.length > 0) {
           setQuestions(dbQs.map(q => ({
@@ -167,9 +175,7 @@ const App: React.FC = () => {
             setTimerDuration(stateData.timer_duration || 40);
         }
       } catch (err) {
-        console.error("Critical Init Error:", err);
-      } finally {
-        // ALWAYS hide loader, no matter what
+        console.warn("Supabase not ready, using local data.");
         setIsAppLoading(false);
       }
     };
@@ -177,7 +183,7 @@ const App: React.FC = () => {
     initApp();
 
     // Subscribe to state updates
-    const channel = supabase.channel('global-state')
+    const channel = supabase.channel('global-updates')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `id=eq.${GAME_STATE_ID}` }, (payload) => {
             const newState = payload.new as RemoteGameState;
             if (!newState) return;
@@ -189,7 +195,6 @@ const App: React.FC = () => {
                     setHasSubmitted(false);
                     setMarketCommentary("");
                     setShowResult(false);
-                    setGameState(curr => curr === GameState.GAME_OVER ? GameState.PLAYING : curr);
                 }
                 return newState.current_round_index;
               });
@@ -202,7 +207,10 @@ const App: React.FC = () => {
         })
         .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      clearTimeout(emergencyTimeout);
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -211,9 +219,21 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   if (isAppLoading) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-      <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
+      <div className="relative">
+          <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
+          <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse"></div>
+      </div>
       <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.3em]">Connecting to Exchange...</p>
+      
+      {showEmergencyLink && (
+        <button 
+          onClick={() => { setIsAppLoading(false); setGameState(GameState.ADMIN_DASHBOARD); }}
+          className="mt-12 flex items-center gap-2 text-[10px] font-black text-rose-500 uppercase tracking-widest hover:text-rose-400 transition-colors border-t border-slate-900 pt-6"
+        >
+          <ShieldAlert size={14} /> Force Emergency Access
+        </button>
+      )}
     </div>
   );
 
@@ -227,9 +247,15 @@ const App: React.FC = () => {
 
   if (!team || !currentQuestion) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-          <Loader2 className="animate-spin h-8 w-8 text-slate-700 mb-6" />
-          <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.4em] animate-pulse">Waiting for Floor Manager...</p>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950">
+          <Loader2 className="animate-spin h-8 w-8 text-slate-800 mb-6" />
+          <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.4em] animate-pulse">Awaiting Floor Signal...</p>
+          <button 
+            onClick={() => setGameState(GameState.ADMIN_DASHBOARD)}
+            className="mt-8 text-[9px] font-black text-slate-700 uppercase tracking-widest hover:text-indigo-500"
+          >
+            Direct Console Bypass
+          </button>
         </div>
       );
   }
@@ -279,7 +305,7 @@ const App: React.FC = () => {
             )}
         </main>
         <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
-          Rupee Rumble Digital Exchange • Secure Protocol v2.5 • All Trades Final
+          Rupee Rumble Digital Exchange • Secure Protocol v3.0 • All Trades Final
         </footer>
     </div>
   );
