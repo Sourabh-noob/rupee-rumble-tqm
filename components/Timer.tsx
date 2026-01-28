@@ -11,16 +11,18 @@ interface TimerProps {
 
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnabled }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
-  
   const onTimeUpRef = useRef(onTimeUp);
 
   useEffect(() => {
     onTimeUpRef.current = onTimeUp;
   }, [onTimeUp]);
 
+  // CRITICAL: Reset timer whenever it becomes active or duration changes
   useEffect(() => {
-    setTimeLeft(duration);
-  }, [duration]);
+    if (isActive) {
+      setTimeLeft(duration);
+    }
+  }, [isActive, duration]);
 
   // Handle Start Sound
   useEffect(() => {
@@ -30,7 +32,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
   }, [isActive, soundEnabled]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || timeLeft <= 0) return;
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
@@ -60,7 +62,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [isActive, soundEnabled]); 
+  }, [isActive, soundEnabled, timeLeft === duration]); // Re-run when timer is reset to full
 
   // Visual urgency helpers
   const isUrgent = timeLeft <= 10;
@@ -82,7 +84,6 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
 
   return (
     <div className="flex flex-col items-center justify-center p-2 md:p-4">
-      {/* Inject custom animations */}
       <style>{`
         @keyframes heartbeat {
           0% { transform: scale(1); }
@@ -124,7 +125,6 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
 
       <div className={`relative flex items-center justify-center w-24 h-24 md:w-36 md:h-36 rounded-full border-2 md:border-4 ${getColorClasses()} transition-colors duration-300 ${getContainerAnimation()}`}>
         
-        {/* Inner Content */}
         <div className="flex flex-col items-center z-10">
             <TimerIcon className={`w-5 h-5 md:w-8 md:h-8 mb-0.5 md:mb-1 ${isUrgent ? 'animate-bounce' : ''} ${getColorClasses().split(' ')[0]}`} />
             <span className={`text-2xl md:text-4xl font-bold font-mono leading-none ${getColorClasses().split(' ')[0]} ${isUrgent ? 'animate-urgent-text' : ''}`}>
@@ -133,7 +133,6 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
             </span>
         </div>
 
-        {/* Background track */}
         <svg className="absolute top-0 left-0 w-full h-full -rotate-90 pointer-events-none overflow-visible" viewBox="0 0 144 144">
            <circle
              cx="50%"
@@ -144,7 +143,6 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
              strokeWidth="4"
              className="text-slate-200 dark:text-slate-800 transition-colors duration-300 opacity-30"
            />
-           {/* Progress Ring */}
            <circle
              cx="50%"
              cy="50%"
@@ -152,14 +150,13 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
              fill="none"
              stroke="currentColor"
              strokeWidth="6"
-             strokeDasharray="402" // 2 * pi * 64
+             strokeDasharray="402"
              strokeDashoffset={402 - (402 * progress) / 100}
              strokeLinecap="round"
              className={`${getColorClasses().split(' ')[0]} transition-all duration-1000 ease-linear drop-shadow-md`}
            />
         </svg>
 
-        {/* Urgency Overlay Background Pulse */}
         {isUrgent && (
             <div className="absolute inset-0 rounded-full bg-red-500 opacity-10 animate-ping pointer-events-none"></div>
         )}

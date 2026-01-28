@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
@@ -76,8 +75,6 @@ const App: React.FC = () => {
                 setIsTimerActive(data.is_timer_active);
                 setShowResult(data.show_result);
                 setShowLeaderboard(data.show_leaderboard);
-            } else {
-                console.warn("No game_state row found for ID 1. Please run the SQL setup script.");
             }
         } catch (err) {
             console.error("Failed to connect to Supabase:", err);
@@ -93,13 +90,18 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
-            setCurrentRoundIndex(prev => {
-              if (newState.current_round_index !== prev) {
-                setAllocations({ A: 0, B: 0, C: 0, D: 0 });
-                setHasSubmitted(false);
-              }
-              return newState.current_round_index;
+            console.log("Supabase State Update:", newState);
+            
+            // Handle round changes
+            setCurrentRoundIndex(prevIndex => {
+                if (newState.current_round_index !== prevIndex) {
+                    setAllocations({ A: 0, B: 0, C: 0, D: 0 });
+                    setHasSubmitted(false);
+                }
+                return newState.current_round_index;
             });
+            
+            // Handle timer/UI state
             setIsTimerActive(newState.is_timer_active);
             setShowResult(newState.show_result);
             setShowLeaderboard(newState.show_leaderboard);
@@ -135,6 +137,9 @@ const App: React.FC = () => {
   const handleAdminStartRound = async (roundNum: number, questionNum: number) => {
     const index = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === questionNum);
     if (index !== -1) {
+        // Reset the timer state in Supabase so it triggers a fresh start for all clients
+        await supabase.from('game_state').update({ is_timer_active: false }).eq('id', GAME_STATE_ID);
+        
         const { error } = await supabase.from('game_state').update({
             current_round_index: index,
             is_timer_active: true,
@@ -152,6 +157,9 @@ const App: React.FC = () => {
   const handleManualSubmit = () => setHasSubmitted(true);
 
   const handleTimeUp = () => {
+    // Local stop is important to prevent redundant calls
+    if (!isTimerActive) return;
+    
     setHasSubmitted(true);
     setIsTimerActive(false);
     handleRoundEnd();
@@ -176,6 +184,7 @@ const App: React.FC = () => {
         if (keptAmount >= team.balance && team.balance > 0) playSound('profit'); 
         else playSound('loss'); 
     }
+    // Result visibility is controlled globally by admin, or locally as fallback
     setShowResult(true);
   };
 
@@ -202,7 +211,7 @@ const App: React.FC = () => {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900">
             <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mb-4" />
-            <p className="text-slate-500 font-mono text-sm animate-pulse">Analyzing Market Data...</p>
+            <p className="text-slate-500 font-mono text-sm animate-pulse">Syncing Market Data...</p>
           </div>
         );
       }
@@ -211,7 +220,7 @@ const App: React.FC = () => {
         return (
           <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-8 text-center">
             <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Initialization Failed</h2>
+            <h2 className="text-2xl font-bold mb-2">Sync Error</h2>
             <p className="text-slate-500 mb-6">{initError}</p>
             <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Retry</button>
           </div>
@@ -224,7 +233,7 @@ const App: React.FC = () => {
               <div className="absolute top-4 left-4 flex gap-2 z-10">
                   <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
                       {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                      {isConnected ? 'LIVE' : 'SYNCING'}
+                      {isConnected ? 'LIVE' : 'OFFLINE'}
                   </div>
               </div>
               <div className="absolute top-4 right-4 flex gap-2 z-10">
@@ -305,11 +314,11 @@ const App: React.FC = () => {
                             isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
                         />
                     ) : (
-                        <div className="space-y-8">
+                        <div className="space-y-8 animate-fade-in">
                             <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
                                  <div className="flex flex-col md:flex-row gap-8 items-start">
                                     <div className="flex-1 space-y-6 relative z-10">
-                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">Trading Query</span>
+                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">Market Query</span>
                                         <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight tracking-tight">{currentQuestion.text}</h3>
                                     </div>
                                     <div className="flex-shrink-0">
