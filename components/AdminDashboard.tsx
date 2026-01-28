@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Question, Team } from '../types';
-import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users } from 'lucide-react';
+import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check } from 'lucide-react';
 import { supabase, GAME_STATE_ID } from '../services/supabaseService';
 
 interface AdminDashboardProps {
@@ -21,7 +21,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onLogout,
   onStartRound
 }) => {
-  const [activeTab, setActiveTab] = useState<'editor' | 'live' | 'roster'>('live');
+  const [activeTab, setActiveTab] = useState<'editor' | 'live' | 'roster' | 'setup'>('live');
   const [selectedRound, setSelectedRound] = useState(1);
   const [localQuestions, setLocalQuestions] = useState<Question[]>(JSON.parse(JSON.stringify(questions)));
   const [saveMessage, setSaveMessage] = useState('');
@@ -31,10 +31,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [syncing, setSyncing] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const sqlSchema = `-- RUN THIS IN YOUR SUPABASE SQL EDITOR TO FIX SCHEMA ERRORS
+-- This ensures all required columns (id, name, members, balance, history) exist.
+
+CREATE TABLE IF NOT EXISTS teams (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  members TEXT,
+  balance NUMERIC DEFAULT 1000,
+  history JSONB DEFAULT '[]'::jsonb,
+  last_active TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS game_state (
+  id BIGINT PRIMARY KEY,
+  current_round_index INT DEFAULT 0,
+  is_timer_active BOOLEAN DEFAULT FALSE,
+  show_result BOOLEAN DEFAULT FALSE,
+  show_leaderboard BOOLEAN DEFAULT FALSE,
+  timer_duration INT DEFAULT 40
+);
+
+-- Ensure the initial game state exists
+INSERT INTO game_state (id, current_round_index, is_timer_active, show_result, show_leaderboard, timer_duration)
+VALUES (1, 0, false, false, false, 40)
+ON CONFLICT (id) DO NOTHING;`;
 
   const fetchTeams = async () => {
-    const { data } = await supabase.from('teams').select('*').order('balance', { ascending: false });
+    const { data, error } = await supabase.from('teams').select('*').order('balance', { ascending: false });
     if (data) setRegisteredTeams(data as Team[]);
+    if (error) console.error("Roster fetch error:", error.message);
   };
 
   useEffect(() => {
@@ -51,7 +79,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     };
     init();
 
-    // Live listener for new teams joining
     const channel = supabase.channel('roster-updates')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => {
         fetchTeams();
@@ -60,6 +87,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(sqlSchema);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const toggleLeaderboard = async () => {
     const newVal = !isLeaderboardVisible;
@@ -117,16 +150,19 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
         </div>
         
-        <div className="flex gap-4 items-center">
-             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700">
-                <button onClick={() => setActiveTab('editor')} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'editor' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}>
+        <div className="flex gap-2 items-center">
+             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-1 border border-slate-200 dark:border-slate-700 overflow-x-auto max-w-[400px]">
+                <button onClick={() => setActiveTab('editor')} className={`whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${activeTab === 'editor' ? 'bg-white dark:bg-slate-700 shadow text-indigo-600 dark:text-indigo-400' : 'text-slate-500'}`}>
                   Editor
                 </button>
-                <button onClick={() => setActiveTab('live')} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'live' ? 'bg-white dark:bg-slate-700 shadow text-green-600 dark:text-green-400' : 'text-slate-500'}`}>
+                <button onClick={() => setActiveTab('live')} className={`whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${activeTab === 'live' ? 'bg-white dark:bg-slate-700 shadow text-green-600 dark:text-green-400' : 'text-slate-500'}`}>
                   Live
                 </button>
-                <button onClick={() => setActiveTab('roster')} className={`flex items-center gap-2 px-4 py-1.5 rounded-md text-[10px] font-black uppercase tracking-wider transition-all ${activeTab === 'roster' ? 'bg-white dark:bg-slate-700 shadow text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
+                <button onClick={() => setActiveTab('roster')} className={`whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${activeTab === 'roster' ? 'bg-white dark:bg-slate-700 shadow text-amber-600 dark:text-amber-400' : 'text-slate-500'}`}>
                   Roster
+                </button>
+                <button onClick={() => setActiveTab('setup')} className={`whitespace-nowrap flex items-center gap-2 px-3 py-1.5 rounded-md text-[9px] font-black uppercase tracking-wider transition-all ${activeTab === 'setup' ? 'bg-white dark:bg-slate-700 shadow text-rose-600 dark:text-rose-400' : 'text-slate-500'}`}>
+                  Setup
                 </button>
              </div>
              <button onClick={onLogout} className="text-slate-400 hover:text-red-500 transition-colors p-2 bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700"><LogOut size={16} /></button>
@@ -134,9 +170,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       <div className="flex-1 overflow-hidden flex">
+        {activeTab === 'setup' && (
+          <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
+             <div className="max-w-4xl mx-auto space-y-8">
+                <div className="space-y-2">
+                   <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
+                      <Database className="text-rose-500" /> Database Synchronization
+                   </h2>
+                   <p className="text-sm text-slate-500 max-w-2xl">If you are seeing "column not found" errors, your Supabase table schema needs to be updated. Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
+                </div>
+                
+                <div className="relative group">
+                   <pre className="bg-slate-900 text-indigo-300 p-8 rounded-2xl font-mono text-xs overflow-x-auto border border-slate-800 shadow-2xl leading-relaxed">
+                      {sqlSchema}
+                   </pre>
+                   <button 
+                      onClick={copyToClipboard}
+                      className="absolute top-4 right-4 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg font-black text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg"
+                   >
+                      {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy SQL</>}
+                   </button>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/50 p-6 rounded-2xl flex items-start gap-4">
+                   <AlertTriangle className="text-amber-500 shrink-0 mt-1" />
+                   <div>
+                      <h4 className="font-bold text-amber-900 dark:text-amber-200 text-sm">Deployment Note</h4>
+                      <p className="text-xs text-amber-800/70 dark:text-amber-300/60 mt-1">Running this script will not delete existing data if use "IF NOT EXISTS", but it will ensure the columns 'members', 'balance', and 'history' are available for the application to function correctly.</p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
+
         {activeTab === 'editor' && (
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
-               {/* Editor content same as before but simplified for space */}
                <div className="max-w-3xl mx-auto space-y-6">
                  <h2 className="text-xl font-black">Question Bank</h2>
                  {roundQuestions.map(q => (
@@ -161,12 +229,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                    {registeredTeams.map(team => (
                      <div key={team.id} className="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
                         <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-xl">
-                          {team.name.charAt(0)}
+                          {team.name ? team.name.charAt(0) : '?'}
                         </div>
                         <div>
-                           <p className="font-black text-slate-900 dark:text-white leading-none">{team.name}</p>
-                           <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest">{team.members}</p>
-                           <p className="text-xs font-mono font-bold text-green-500 mt-2">₹{team.balance}</p>
+                           <p className="font-black text-slate-900 dark:text-white leading-none">{team.name || "Unknown Team"}</p>
+                           <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest line-clamp-1">{team.members || "No members listed"}</p>
+                           <p className="text-xs font-mono font-bold text-green-500 mt-2">₹{team.balance || 0}</p>
                         </div>
                      </div>
                    ))}

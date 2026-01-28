@@ -70,8 +70,14 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Non-blocking sync to Supabase (Removed last_active to fix schema error)
-    supabase.from('teams').upsert(updatedTeam).then(({ error }) => {
+    // Non-blocking sync to Supabase (Omit last_active to avoid common schema errors)
+    supabase.from('teams').upsert({
+      id: updatedTeam.id,
+      name: updatedTeam.name,
+      members: updatedTeam.members,
+      balance: updatedTeam.balance,
+      history: updatedTeam.history
+    }).then(({ error }) => {
       if (error) console.error("Leaderboard sync failed:", error.message);
     });
     
@@ -92,7 +98,6 @@ const App: React.FC = () => {
   const handleJoin = async (newTeam: Team) => {
     return new Promise<void>(async (resolve, reject) => {
       try {
-        // Fix: Removed 'last_active' as it caused schema cache errors in Supabase
         const { error } = await supabase.from('teams').upsert({
           id: newTeam.id,
           name: newTeam.name,
@@ -103,7 +108,14 @@ const App: React.FC = () => {
         
         if (error) {
           console.error("Supabase Join Error:", error.message);
-          alert("Failed to join exchange: " + error.message + ". Please ensure the 'teams' table exists and has columns: id, name, members, balance, history.");
+          // High-visibility error handling for schema issues
+          if (error.message.includes("column") || error.message.includes("cache")) {
+             alert(`DATABASE SCHEMA ERROR: The column "${error.message.split('"')[1]}" could not be found. 
+             
+Please log in as Director and go to the "Setup" tab to get the SQL script required to fix your Supabase tables.`);
+          } else {
+             alert("Failed to join exchange: " + error.message);
+          }
           reject(error);
           return;
         }
@@ -245,10 +257,10 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10">
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-40 flex justify-between items-center shadow-xl">
             <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">{team.name.charAt(0)}</div>
+                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">{team.name ? team.name.charAt(0) : '?'}</div>
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Portfolio Value</span>
-                  <h2 className="font-mono font-black text-slate-900 dark:text-white leading-none">₹{team.balance}</h2>
+                  <h2 className="font-mono font-black text-slate-900 dark:text-white leading-none">₹{team.balance || 0}</h2>
                 </div>
             </div>
             <div className="flex gap-2 items-center">
