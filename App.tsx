@@ -39,15 +39,18 @@ const App: React.FC = () => {
   }, [team, allocations, currentRoundIndex, questions]);
 
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) return;
+    
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence.`,
+        contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence for a high-stakes trading game.`,
       });
       setMarketCommentary(response.text || "");
     } catch (e) {
-      console.error("Commentary Error:", e);
+      console.error("AI Commentary failed:", e);
     }
   };
 
@@ -69,9 +72,9 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Sync to Supabase
+    // Non-blocking sync to Supabase
     supabase.from('teams').upsert(updatedTeam).then(({ error }) => {
-      if (error) console.error("Sync Error:", error);
+      if (error) console.error("Leaderboard sync failed:", error.message);
     });
     
     if (soundEnabled) {
@@ -93,9 +96,12 @@ const App: React.FC = () => {
     setGameState(GameState.PLAYING);
     setStartBalance(newTeam.balance);
     
-    // Immediately sync to Supabase
-    const { error } = await supabase.from('teams').upsert(newTeam);
-    if (error) console.error("Join Sync Error:", error);
+    // Register team in database immediately
+    try {
+      await supabase.from('teams').upsert(newTeam);
+    } catch (err) {
+      console.warn("Could not register team in central database, continuing locally...");
+    }
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
@@ -113,11 +119,17 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
       try {
+        // 1. Load questions (this is essential and local)
         const qs = await generateGameQuestions();
+        if (!qs || qs.length === 0) throw new Error("Question bank is empty.");
         setQuestions(qs);
         
-        // Use maybeSingle to prevent error if table is empty
-        const { data, error } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
+        // 2. Fetch remote game state
+        const { data, error } = await supabase
+          .from('game_state')
+          .select('*')
+          .eq('id', GAME_STATE_ID)
+          .maybeSingle(); 
         
         if (data) {
             setCurrentRoundIndex(data.current_round_index || 0);
@@ -126,11 +138,11 @@ const App: React.FC = () => {
             setShowLeaderboard(!!data.show_leaderboard);
             setTimerDuration(data.timer_duration || 40);
         } else if (error) {
-            console.error("Supabase Init Error:", error);
+            console.warn("Supabase initial state fetch failed:", error.message);
         }
-      } catch (err) {
-        console.error("InitApp Catch:", err);
-        setInitError("Market connectivity issues. Please check your Supabase configuration.");
+      } catch (err: any) {
+        console.error("Initialization Critical Error:", err);
+        setInitError(err.message || "Could not initialize market data.");
       } finally {
         setIsAppLoading(false);
       }
@@ -138,7 +150,8 @@ const App: React.FC = () => {
 
     initApp();
 
-    const channel = supabase.channel(`game-state-${Date.now()}`)
+    // Setup Realtime Channel
+    const channel = supabase.channel('room-1')
         .on('postgres_changes', { 
             event: 'UPDATE', 
             schema: 'public', 
@@ -146,7 +159,7 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
-            console.log("State Update Received:", newState);
+            if (!newState) return;
             
             if (newState.current_round_index !== undefined) {
               setCurrentRoundIndex(prev => {
@@ -166,12 +179,13 @@ const App: React.FC = () => {
             if (newState.timer_duration !== undefined) setTimerDuration(newState.timer_duration);
         })
         .subscribe((status) => {
-          console.log("Subscription status:", status);
           setIsConnected(status === 'SUBSCRIBED');
         });
 
-    return () => { supabase.removeChannel(channel); };
-  }, []); // Run only once on mount
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
@@ -180,47 +194,57 @@ const App: React.FC = () => {
 
   if (isAppLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-      <Loader2 className="animate-spin h-10 w-10 text-indigo-500 mb-4" />
-      <p className="text-slate-500 font-mono text-xs uppercase tracking-[0.2em]">Initialising Market Terminals...</p>
+      <div className="relative">
+        <Loader2 className="animate-spin h-12 w-12 text-indigo-500 mb-4" />
+        <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse"></div>
+      </div>
+      <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.3em]">Connecting to Exchange...</p>
     </div>
   );
 
   if (initError) return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-center">
-      <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-      <h2 className="text-xl font-bold mb-4 text-white">System Fault</h2>
-      <p className="text-slate-400 mb-6 max-w-sm mx-auto">{initError}</p>
-      <button onClick={() => window.location.reload()} className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-8 py-3 rounded-xl transition-all shadow-lg">Retry Connection</button>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 p-6 text-center">
+      <AlertCircle className="h-16 w-16 text-red-500 mb-6 drop-shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
+      <h2 className="text-2xl font-display font-bold mb-2 text-white">CONNECTION TERMINATED</h2>
+      <p className="text-slate-400 mb-8 max-w-sm mx-auto font-mono text-xs">{initError}</p>
+      <button onClick={() => window.location.reload()} className="bg-white text-black font-black px-10 py-4 rounded-full transition-all hover:bg-slate-200 active:scale-95 shadow-2xl">
+        REBOOT TERMINAL
+      </button>
     </div>
   );
 
+  // High Priority Screens
   if (gameState === GameState.SETUP) return <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />;
   if (gameState === GameState.ADMIN_DASHBOARD) return <AdminDashboard questions={questions} setQuestions={setQuestions} timerDuration={timerDuration} setTimerDuration={setTimerDuration} onLogout={() => setGameState(GameState.SETUP)} onStartRound={handleAdminStartRound} />;
 
+  // Post-Join Logic
   const currentQuestion = questions[currentRoundIndex];
+
+  if (showLeaderboard) return <Leaderboard currentRound={currentQuestion?.roundNumber || 1} />;
 
   if (!team || !currentQuestion) {
       return (
         <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
-          <Loader2 className="animate-spin h-6 w-6 text-slate-700 mb-4" />
-          <p className="text-slate-500 font-mono text-[10px] uppercase tracking-widest">Awaiting Market Launch Signal...</p>
+          <Loader2 className="animate-spin h-8 w-8 text-slate-700 mb-6" />
+          <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.4em] animate-pulse">Waiting for Floor Manager...</p>
         </div>
       );
   }
 
-  if (showLeaderboard) return <Leaderboard currentRound={currentQuestion.roundNumber} />;
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10">
-        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-30 flex justify-between items-center shadow-lg">
+        <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-40 flex justify-between items-center shadow-xl">
             <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white font-black">{team.name.charAt(0)}</div>
-                <h2 className="font-bold text-slate-900 dark:text-white truncate max-w-[120px]">₹{team.balance}</h2>
+                <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black shadow-lg shadow-indigo-500/20">{team.name.charAt(0)}</div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Portfolio Value</span>
+                  <h2 className="font-mono font-black text-slate-900 dark:text-white leading-none">₹{team.balance}</h2>
+                </div>
             </div>
-            <div className="flex gap-1 items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`}></div>
-                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
+            <div className="flex gap-2 items-center">
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></div>
+                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
             </div>
         </header>
 
@@ -228,14 +252,22 @@ const App: React.FC = () => {
             {showResult ? (
                 <div className="space-y-6">
                     <ResultScreen question={currentQuestion} allocations={allocations} startBalance={startBalance} onNext={() => setShowResult(false)} isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1} />
-                    {marketCommentary && <div className="bg-indigo-600/10 border border-indigo-500/20 p-4 rounded-xl text-center italic text-indigo-400 text-xs animate-fade-in">"{marketCommentary}"</div>}
+                    {marketCommentary && (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl text-center shadow-lg animate-fade-in flex items-center justify-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 flex-shrink-0">AI</div>
+                        <p className="italic text-slate-600 dark:text-slate-300 text-sm font-medium">"{marketCommentary}"</p>
+                      </div>
+                    )}
                 </div>
             ) : (
                 <div className="space-y-6">
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col md:flex-row gap-6 items-center">
-                        <div className="flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Global Exchange Round</span>
-                            <h3 className="text-xl md:text-3xl font-display font-bold text-slate-900 dark:text-white mt-1 leading-tight">{currentQuestion.text}</h3>
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col md:flex-row gap-8 items-center transition-all">
+                        <div className="flex-1 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 bg-indigo-500 text-white text-[10px] font-black rounded uppercase">Round {currentQuestion.roundNumber}</span>
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Live Trading Sequence</span>
+                            </div>
+                            <h3 className="text-xl md:text-4xl font-display font-bold text-slate-900 dark:text-white leading-tight">{currentQuestion.text}</h3>
                         </div>
                         <Timer key={`${currentRoundIndex}-${isTimerActive}`} duration={timerDuration} isActive={isTimerActive} onTimeUp={handleTimeUp} soundEnabled={soundEnabled} />
                     </div>
@@ -243,7 +275,9 @@ const App: React.FC = () => {
                 </div>
             )}
         </main>
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-700 py-1 text-[7px] font-mono text-center z-50 tracking-[0.4em] uppercase">Rupee Rumble • Verified Secure Connection</div>
+        <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
+          Rupee Rumble Digital Exchange • Secure Protocol v2.5 • All Trades Final
+        </footer>
     </div>
   );
 };
