@@ -50,7 +50,12 @@ const App: React.FC = () => {
             .eq('id', GAME_STATE_ID)
             .single();
         
-        if (data && !error) {
+        if (error) {
+            console.error("Error fetching initial game state:", error);
+            return;
+        }
+
+        if (data) {
             setCurrentRoundIndex(data.current_round_index);
             setIsTimerActive(data.is_timer_active);
             setShowResult(data.show_result);
@@ -88,13 +93,14 @@ const App: React.FC = () => {
 
   const syncTeamToDatabase = useCallback(async (updatedTeam: Team) => {
       if (!updatedTeam) return;
-      await supabase.from('teams').upsert({
+      const { error } = await supabase.from('teams').upsert({
           id: updatedTeam.id,
           name: updatedTeam.name,
           members: updatedTeam.members,
           balance: updatedTeam.balance,
           history: updatedTeam.history
       });
+      if (error) console.error("Error syncing team:", error);
   }, []);
 
   const handleJoin = async (newTeam: Team) => {
@@ -107,12 +113,17 @@ const App: React.FC = () => {
   const handleAdminStartRound = async (roundNum: number, questionNum: number) => {
     const index = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === questionNum);
     if (index !== -1) {
-        await supabase.from('game_state').update({
+        const { error } = await supabase.from('game_state').update({
             current_round_index: index,
             is_timer_active: true,
             show_result: false,
             show_leaderboard: false
         }).eq('id', GAME_STATE_ID);
+        
+        if (error) {
+            console.error("Failed to start round in Supabase:", error);
+            alert(`Error: ${error.message}. Check if row ID 1 exists and schema is correct.`);
+        }
     }
   };
 

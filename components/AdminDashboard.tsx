@@ -29,7 +29,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   useEffect(() => {
     const fetchLeaderboardStatus = async () => {
-      const { data } = await supabase.from('game_state').select('show_leaderboard').eq('id', GAME_STATE_ID).single();
+      const { data, error } = await supabase.from('game_state').select('show_leaderboard').eq('id', GAME_STATE_ID).single();
+      if (error) {
+          console.error("Error checking leaderboard status:", error);
+      }
       if (data) setIsLeaderboardVisible(data.show_leaderboard);
     };
     fetchLeaderboardStatus();
@@ -37,8 +40,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const toggleLeaderboard = async () => {
     const newVal = !isLeaderboardVisible;
+    const { error } = await supabase.from('game_state').update({ show_leaderboard: newVal }).eq('id', GAME_STATE_ID);
+    
+    if (error) {
+        console.error("Failed to update leaderboard status:", error);
+        alert(`Supabase Error: ${error.message}`);
+        return;
+    }
     setIsLeaderboardVisible(newVal);
-    await supabase.from('game_state').update({ show_leaderboard: newVal }).eq('id', GAME_STATE_ID);
   };
 
   const handleQuestionChange = (id: string, field: keyof Question | 'options', value: any, optionKey?: 'A'|'B'|'C'|'D') => {
