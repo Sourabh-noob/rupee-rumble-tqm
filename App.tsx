@@ -70,6 +70,7 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
+    // Non-blocking sync to Supabase
     supabase.from('teams').upsert({
       id: updatedTeam.id,
       name: updatedTeam.name,
@@ -77,7 +78,7 @@ const App: React.FC = () => {
       balance: updatedTeam.balance,
       history: updatedTeam.history
     }).then(({ error }) => {
-      if (error) console.error("Leaderboard sync failed:", error.message);
+      if (error) console.warn("Leaderboard sync failed:", error.message);
     });
     
     if (soundEnabled) {
@@ -94,42 +95,41 @@ const App: React.FC = () => {
     handleRoundEnd();
   }, []);
 
-  const handleJoin = async (newTeam: Team) => {
-    return new Promise<void>(async (resolve, reject) => {
-      try {
-        const { error } = await supabase.from('teams').upsert({
-          id: newTeam.id,
-          name: newTeam.name,
-          members: newTeam.members,
-          balance: newTeam.balance,
-          history: newTeam.history
-        });
-        
-        if (error) {
-          console.error("Supabase Error:", error);
-          if (error.message.includes("column") || error.message.includes("cache")) {
-             alert(`DATABASE ERROR: The column is missing from the "teams" table.
-             
-1. Log in as Director.
-2. Go to the "Setup" tab.
-3. Run the SQL script provided there.
-4. If it still fails, go to Supabase Settings -> API and click "Reload PostgREST Schema".`);
-          } else {
-             alert("Failed to join exchange: " + error.message);
-          }
-          reject(error);
-          return;
-        }
+  const handleNextPhase = () => {
+    const isGameOver = team?.balance === 0 || currentRoundIndex >= questions.length - 1;
+    if (isGameOver) {
+      setGameState(GameState.GAME_OVER);
+    }
+    setShowResult(false);
+  };
 
-        setTeam(newTeam);
-        setGameState(GameState.PLAYING);
-        setStartBalance(newTeam.balance);
-        resolve();
-      } catch (err: any) {
-        console.warn("Could not register team in central database.", err.message);
-        reject(err);
+  const handleJoin = async (newTeam: Team) => {
+    try {
+      const { error } = await supabase.from('teams').upsert({
+        id: newTeam.id,
+        name: newTeam.name,
+        members: newTeam.members,
+        balance: newTeam.balance,
+        history: newTeam.history
+      });
+      
+      if (error) {
+        if (error.message.includes("column") || error.message.includes("cache")) {
+           alert(`DATABASE ERROR: Your Supabase table is missing columns. 
+           
+Please log in as Director and run the SQL in the "Setup" tab.`);
+        } else {
+           alert("Failed to join exchange: " + error.message);
+        }
+        return;
       }
-    });
+
+      setTeam(newTeam);
+      setGameState(GameState.PLAYING);
+      setStartBalance(newTeam.balance);
+    } catch (err: any) {
+      console.warn("Join failed:", err.message);
+    }
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
@@ -147,10 +147,14 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
       try {
-        const { data: dbQs, error: qError } = await supabase.from('questions').select('*');
-        let finalQs: Question[] = [];
+        // Load default questions first to be safe
+        const localQs = await generateGameQuestions();
+        setQuestions(localQs);
+
+        // Try to fetch from Supabase
+        const { data: dbQs } = await supabase.from('questions').select('*');
         if (dbQs && dbQs.length > 0) {
-          finalQs = dbQs.map(q => ({
+          const mapped = dbQs.map(q => ({
             id: q.id,
             roundNumber: q.round_number,
             questionNumber: q.question_number,
@@ -158,22 +162,10 @@ const App: React.FC = () => {
             options: q.options,
             correctAnswer: q.correct_answer
           }));
-        } else {
-          finalQs = await generateGameQuestions();
-          if (!qError) {
-             const seed = finalQs.map(q => ({
-                id: q.id,
-                round_number: q.roundNumber,
-                question_number: q.questionNumber,
-                text: q.text,
-                options: q.options,
-                correct_answer: q.correctAnswer
-             }));
-             supabase.from('questions').upsert(seed).then();
-          }
+          setQuestions(mapped);
         }
-        setQuestions(finalQs);
         
+        // Load state
         const { data: stateData } = await supabase
           .from('game_state')
           .select('*')
@@ -188,8 +180,7 @@ const App: React.FC = () => {
             setTimerDuration(stateData.timer_duration || 40);
         }
       } catch (err: any) {
-        console.error("Initialization Critical Error:", err);
-        setInitError(err.message || "Could not initialize market data.");
+        console.warn("Init non-fatal error:", err.message);
       } finally {
         setIsAppLoading(false);
       }
@@ -214,6 +205,7 @@ const App: React.FC = () => {
                     setHasSubmitted(false);
                     setMarketCommentary("");
                     setShowResult(false);
+                    if (gameState === GameState.GAME_OVER) setGameState(GameState.PLAYING);
                 }
                 return newState.current_round_index;
               });
@@ -224,12 +216,10 @@ const App: React.FC = () => {
             if (newState.show_leaderboard !== undefined) setShowLeaderboard(!!newState.show_leaderboard);
             if (newState.timer_duration !== undefined) setTimerDuration(newState.timer_duration);
         })
-        .subscribe();
+        .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+    return () => { supabase.removeChannel(channel); };
+  }, [gameState]);
 
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
@@ -254,6 +244,7 @@ const App: React.FC = () => {
 
   if (gameState === GameState.SETUP) return <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />;
   if (gameState === GameState.ADMIN_DASHBOARD) return <AdminDashboard questions={questions} setQuestions={setQuestions} timerDuration={timerDuration} setTimerDuration={setTimerDuration} onLogout={() => setGameState(GameState.SETUP)} onStartRound={handleAdminStartRound} />;
+  if (gameState === GameState.GAME_OVER && team) return <FinalStandings team={team} onRestart={() => window.location.reload()} />;
 
   const currentQuestion = questions[currentRoundIndex];
 
@@ -288,7 +279,7 @@ const App: React.FC = () => {
         <main className="flex-1 container mx-auto p-4 md:p-8 max-w-6xl">
             {showResult ? (
                 <div className="space-y-6">
-                    <ResultScreen question={currentQuestion} allocations={allocations} startBalance={startBalance} onNext={() => setShowResult(false)} isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1} />
+                    <ResultScreen question={currentQuestion} allocations={allocations} startBalance={startBalance} onNext={handleNextPhase} isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1} />
                     {marketCommentary && (
                       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-6 rounded-2xl text-center shadow-lg animate-fade-in flex items-center justify-center gap-4">
                         <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 flex-shrink-0">AI</div>
