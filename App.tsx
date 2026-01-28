@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
@@ -9,7 +10,7 @@ import Leaderboard from './components/Leaderboard';
 import Timer from './components/Timer';
 import { generateGameQuestions } from './services/geminiService';
 import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseService';
-import { Sun, Moon, Volume2, VolumeX, Wifi, WifiOff } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Wifi, WifiOff, Loader2, AlertCircle } from 'lucide-react';
 import { playSound } from './utils/sound';
 
 const App: React.FC = () => {
@@ -32,35 +33,54 @@ const App: React.FC = () => {
   const [showResult, setShowResult] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [startBalance, setStartBalance] = useState(1000);
+  const [isAppLoading, setIsAppLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
 
+  // Initial Data Load (Questions)
+  useEffect(() => {
+    generateGameQuestions()
+      .then(qs => {
+        setQuestions(qs);
+        setIsAppLoading(false);
+      })
+      .catch(err => {
+        console.error("Failed to load questions:", err);
+        setInitError("Failed to initialize game data.");
+        setIsAppLoading(false);
+      });
+  }, []);
+
+  // Dark Mode Sync
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  useEffect(() => {
-    generateGameQuestions().then(qs => setQuestions(qs));
-  }, []);
-
+  // Supabase Realtime Sync
   useEffect(() => {
     const fetchInitialState = async () => {
-        const { data, error } = await supabase
-            .from('game_state')
-            .select('*')
-            .eq('id', GAME_STATE_ID)
-            .single();
-        
-        if (error) {
-            console.error("Error fetching initial game state:", error);
-            return;
-        }
+        try {
+            const { data, error } = await supabase
+                .from('game_state')
+                .select('*')
+                .eq('id', GAME_STATE_ID)
+                .maybeSingle(); 
+            
+            if (error) {
+                console.error("Supabase fetch error:", error);
+                return;
+            }
 
-        if (data) {
-            setCurrentRoundIndex(data.current_round_index);
-            setIsTimerActive(data.is_timer_active);
-            setShowResult(data.show_result);
-            setShowLeaderboard(data.show_leaderboard);
-            setIsConnected(true);
+            if (data) {
+                setCurrentRoundIndex(data.current_round_index);
+                setIsTimerActive(data.is_timer_active);
+                setShowResult(data.show_result);
+                setShowLeaderboard(data.show_leaderboard);
+            } else {
+                console.warn("No game_state row found for ID 1. Please run the SQL setup script.");
+            }
+        } catch (err) {
+            console.error("Failed to connect to Supabase:", err);
         }
     };
     fetchInitialState();
@@ -73,11 +93,13 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
-            if (newState.current_round_index !== currentRoundIndex) {
-                setCurrentRoundIndex(newState.current_round_index);
+            setCurrentRoundIndex(prev => {
+              if (newState.current_round_index !== prev) {
                 setAllocations({ A: 0, B: 0, C: 0, D: 0 });
                 setHasSubmitted(false);
-            }
+              }
+              return newState.current_round_index;
+            });
             setIsTimerActive(newState.is_timer_active);
             setShowResult(newState.show_result);
             setShowLeaderboard(newState.show_leaderboard);
@@ -89,7 +111,7 @@ const App: React.FC = () => {
     return () => {
         supabase.removeChannel(channel);
     };
-  }, [currentRoundIndex]);
+  }, []);
 
   const syncTeamToDatabase = useCallback(async (updatedTeam: Team) => {
       if (!updatedTeam) return;
@@ -121,8 +143,8 @@ const App: React.FC = () => {
         }).eq('id', GAME_STATE_ID);
         
         if (error) {
-            console.error("Failed to start round in Supabase:", error);
-            alert(`Error: ${error.message}. Check if row ID 1 exists and schema is correct.`);
+            console.error("Start round update failed:", error);
+            alert(`Error starting round: ${error.message}`);
         }
     }
   };
@@ -164,6 +186,7 @@ const App: React.FC = () => {
         return;
     }
     setStartBalance(team.balance);
+    setShowResult(false);
   };
 
   const handleRestart = () => {
@@ -172,48 +195,68 @@ const App: React.FC = () => {
     setGameState(GameState.SETUP);
   };
 
+  const currentQuestion = questions[currentRoundIndex];
+
   const renderContent = () => {
+      if (isAppLoading) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900">
+            <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mb-4" />
+            <p className="text-slate-500 font-mono text-sm animate-pulse">Analyzing Market Data...</p>
+          </div>
+        );
+      }
+
+      if (initError) {
+        return (
+          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-8 text-center">
+            <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+            <h2 className="text-2xl font-bold mb-2">Initialization Failed</h2>
+            <p className="text-slate-500 mb-6">{initError}</p>
+            <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Retry</button>
+          </div>
+        );
+      }
+
       if (gameState === GameState.SETUP) {
         return (
-            <div className="min-h-screen flex flex-col relative pb-12">
-                <div className="absolute top-4 left-4 flex gap-2 z-10">
-                    <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                        {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
-                        {isConnected ? 'Real-time Linked' : 'Sync Offline'}
-                    </div>
-                </div>
-                <div className="absolute top-4 right-4 flex gap-2 z-10">
-                    <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors hover-glow">
-                        {isDarkMode ? <Sun className="text-white"/> : <Moon />}
-                    </button>
-                </div>
-                <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />
-            </div>
+          <div className="min-h-screen flex flex-col relative pb-12">
+              <div className="absolute top-4 left-4 flex gap-2 z-10">
+                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                      {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
+                      {isConnected ? 'LIVE' : 'SYNCING'}
+                  </div>
+              </div>
+              <div className="absolute top-4 right-4 flex gap-2 z-10">
+                  <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+                      {isDarkMode ? <Sun className="text-white"/> : <Moon />}
+                  </button>
+              </div>
+              <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />
+          </div>
         );
       }
 
       if (gameState === GameState.ADMIN_DASHBOARD) {
         return (
-            <AdminDashboard 
-                questions={questions}
-                setQuestions={setQuestions}
-                timerDuration={timerDuration}
-                setTimerDuration={setTimerDuration}
-                onLogout={() => setGameState(GameState.SETUP)}
-                onStartRound={handleAdminStartRound}
-            />
+          <AdminDashboard 
+              questions={questions}
+              setQuestions={setQuestions}
+              timerDuration={timerDuration}
+              setTimerDuration={setTimerDuration}
+              onLogout={() => setGameState(GameState.SETUP)}
+              onStartRound={handleAdminStartRound}
+          />
         );
       }
 
       if (gameState === GameState.GAME_OVER && team) {
-          return (
-              <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors pb-12">
-                  <FinalStandings team={team} onRestart={handleRestart} />
-              </div>
-          );
+        return (
+          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors pb-12">
+              <FinalStandings team={team} onRestart={handleRestart} />
+          </div>
+        );
       }
-
-      const currentQuestion = questions[currentRoundIndex];
 
       if (gameState === GameState.PLAYING && team && currentQuestion) {
           if (showLeaderboard) {
@@ -225,7 +268,7 @@ const App: React.FC = () => {
           }
 
           return (
-            <div className={`min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12 select-none`}>
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12 select-none">
                 <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
                     <div className="max-w-7xl mx-auto flex justify-between items-center">
                         <div className="flex items-center gap-4">
@@ -234,18 +277,18 @@ const App: React.FC = () => {
                             </div>
                             <div>
                                 <h2 className="font-bold text-slate-900 dark:text-white leading-tight">{team.name}</h2>
-                                <div className="text-xs text-slate-500 font-mono">Current NAV: ₹{team.balance}</div>
+                                <div className="text-xs text-slate-500 font-mono">NAV: ₹{team.balance}</div>
                             </div>
                         </div>
                         <div className="flex items-center gap-4">
                             <div className="hidden md:block text-right">
                                 <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
-                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Question {currentQuestion.questionNumber} / 5</div>
+                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Q{currentQuestion.questionNumber} / 5</div>
                             </div>
-                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover-glow rounded-full">
+                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400">
                                 {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
                             </button>
-                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover-glow rounded-full">
+                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400">
                                  {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
                             </button>
                         </div>
@@ -262,12 +305,12 @@ const App: React.FC = () => {
                             isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
                         />
                     ) : (
-                        <div className="space-y-8 animate-fade-in">
+                        <div className="space-y-8">
                             <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
                                  <div className="flex flex-col md:flex-row gap-8 items-start">
                                     <div className="flex-1 space-y-6 relative z-10">
-                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">Market Query</span>
-                                        <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight tracking-tight drop-shadow-sm">{currentQuestion.text}</h3>
+                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">Trading Query</span>
+                                        <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight tracking-tight">{currentQuestion.text}</h3>
                                     </div>
                                     <div className="flex-shrink-0">
                                         <Timer duration={timerDuration} isActive={isTimerActive} onTimeUp={handleTimeUp} soundEnabled={soundEnabled} />
@@ -289,14 +332,14 @@ const App: React.FC = () => {
             </div>
           );
       }
-      return <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
+      return null;
   }
 
   return (
       <>
         {renderContent()}
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 py-2 text-center text-xs font-mono uppercase tracking-[0.2em] z-50 border-t border-slate-800 shadow-lg">
-            The QuizMasters wish you luck • {isConnected ? 'SYNCED' : 'OFFLINE'}
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 py-2 text-center text-[9px] font-mono uppercase tracking-[0.2em] z-50 border-t border-slate-800">
+            RUPEE RUMBLE • {isConnected ? 'LINKED' : 'OFFLINE'}
         </div>
       </>
   );
