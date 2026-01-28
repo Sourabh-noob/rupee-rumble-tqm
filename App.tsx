@@ -35,7 +35,6 @@ const App: React.FC = () => {
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
-  // Initial Data Load (Questions)
   useEffect(() => {
     generateGameQuestions()
       .then(qs => {
@@ -43,41 +42,24 @@ const App: React.FC = () => {
         setIsAppLoading(false);
       })
       .catch(err => {
-        console.error("Failed to load questions:", err);
-        setInitError("Failed to initialize game data.");
+        setInitError("Market connectivity issues. Please reload.");
         setIsAppLoading(false);
       });
   }, []);
 
-  // Dark Mode Sync
   useEffect(() => {
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  // Supabase Realtime Sync
   useEffect(() => {
     const fetchInitialState = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('game_state')
-                .select('*')
-                .eq('id', GAME_STATE_ID)
-                .maybeSingle(); 
-            
-            if (error) {
-                console.error("Supabase fetch error:", error);
-                return;
-            }
-
-            if (data) {
-                setCurrentRoundIndex(data.current_round_index);
-                setIsTimerActive(data.is_timer_active);
-                setShowResult(data.show_result);
-                setShowLeaderboard(data.show_leaderboard);
-            }
-        } catch (err) {
-            console.error("Failed to connect to Supabase:", err);
+        const { data, error } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
+        if (data && !error) {
+            setCurrentRoundIndex(data.current_round_index);
+            setIsTimerActive(data.is_timer_active);
+            setShowResult(data.show_result);
+            setShowLeaderboard(data.show_leaderboard);
         }
     };
     fetchInitialState();
@@ -90,41 +72,31 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
-            console.log("Supabase State Update:", newState);
-            
-            // Handle round changes
-            setCurrentRoundIndex(prevIndex => {
-                if (newState.current_round_index !== prevIndex) {
+            setCurrentRoundIndex(prev => {
+                if (newState.current_round_index !== prev) {
                     setAllocations({ A: 0, B: 0, C: 0, D: 0 });
                     setHasSubmitted(false);
                 }
                 return newState.current_round_index;
             });
-            
-            // Handle timer/UI state
             setIsTimerActive(newState.is_timer_active);
             setShowResult(newState.show_result);
             setShowLeaderboard(newState.show_leaderboard);
         })
-        .subscribe((status) => {
-            setIsConnected(status === 'SUBSCRIBED');
-        });
+        .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
-    return () => {
-        supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const syncTeamToDatabase = useCallback(async (updatedTeam: Team) => {
       if (!updatedTeam) return;
-      const { error } = await supabase.from('teams').upsert({
+      await supabase.from('teams').upsert({
           id: updatedTeam.id,
           name: updatedTeam.name,
           members: updatedTeam.members,
           balance: updatedTeam.balance,
           history: updatedTeam.history
       });
-      if (error) console.error("Error syncing team:", error);
   }, []);
 
   const handleJoin = async (newTeam: Team) => {
@@ -137,33 +109,24 @@ const App: React.FC = () => {
   const handleAdminStartRound = async (roundNum: number, questionNum: number) => {
     const index = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === questionNum);
     if (index !== -1) {
-        // Reset the timer state in Supabase so it triggers a fresh start for all clients
-        await supabase.from('game_state').update({ is_timer_active: false }).eq('id', GAME_STATE_ID);
-        
-        const { error } = await supabase.from('game_state').update({
+        // Atomic update to prevent missing state changes
+        await supabase.from('game_state').update({
             current_round_index: index,
             is_timer_active: true,
             show_result: false,
             show_leaderboard: false
         }).eq('id', GAME_STATE_ID);
-        
-        if (error) {
-            console.error("Start round update failed:", error);
-            alert(`Error starting round: ${error.message}`);
-        }
     }
   };
 
   const handleManualSubmit = () => setHasSubmitted(true);
 
-  const handleTimeUp = () => {
-    // Local stop is important to prevent redundant calls
+  const handleTimeUp = useCallback(() => {
     if (!isTimerActive) return;
-    
     setHasSubmitted(true);
     setIsTimerActive(false);
     handleRoundEnd();
-  };
+  }, [isTimerActive]);
 
   const handleRoundEnd = async () => {
     if (!team || !questions[currentRoundIndex]) return;
@@ -184,70 +147,39 @@ const App: React.FC = () => {
         if (keptAmount >= team.balance && team.balance > 0) playSound('profit'); 
         else playSound('loss'); 
     }
-    // Result visibility is controlled globally by admin, or locally as fallback
     setShowResult(true);
-  };
-
-  const handleNextRound = () => {
-    if (!team) return;
-    if (team.balance === 0 || currentRoundIndex >= questions.length - 1) {
-        setGameState(GameState.GAME_OVER);
-        return;
-    }
-    setStartBalance(team.balance);
-    setShowResult(false);
-  };
-
-  const handleRestart = () => {
-    setTeam(null);
-    setCurrentRoundIndex(0);
-    setGameState(GameState.SETUP);
   };
 
   const currentQuestion = questions[currentRoundIndex];
 
   const renderContent = () => {
-      if (isAppLoading) {
-        return (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900">
-            <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mb-4" />
-            <p className="text-slate-500 font-mono text-sm animate-pulse">Syncing Market Data...</p>
-          </div>
-        );
-      }
+      if (isAppLoading) return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900">
+          <Loader2 className="animate-spin h-12 w-12 text-indigo-600 mb-4" />
+          <p className="text-slate-500 font-mono text-sm">Opening Exchange...</p>
+        </div>
+      );
 
-      if (initError) {
-        return (
-          <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-8 text-center">
-            <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Sync Error</h2>
-            <p className="text-slate-500 mb-6">{initError}</p>
-            <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold">Retry</button>
-          </div>
-        );
-      }
+      if (initError) return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900 p-8 text-center">
+          <AlertCircle className="h-16 w-16 text-red-500 mb-4" />
+          <h2 className="text-2xl font-bold mb-2">Sync Error</h2>
+          <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-6 py-2 rounded-lg mt-4">Retry</button>
+        </div>
+      );
 
-      if (gameState === GameState.SETUP) {
-        return (
+      if (gameState === GameState.SETUP) return (
           <div className="min-h-screen flex flex-col relative pb-12">
               <div className="absolute top-4 left-4 flex gap-2 z-10">
                   <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${isConnected ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                      {isConnected ? <Wifi size={12} /> : <WifiOff size={12} />}
                       {isConnected ? 'LIVE' : 'OFFLINE'}
                   </div>
               </div>
-              <div className="absolute top-4 right-4 flex gap-2 z-10">
-                  <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
-                      {isDarkMode ? <Sun className="text-white"/> : <Moon />}
-                  </button>
-              </div>
               <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />
           </div>
-        );
-      }
+      );
 
-      if (gameState === GameState.ADMIN_DASHBOARD) {
-        return (
+      if (gameState === GameState.ADMIN_DASHBOARD) return (
           <AdminDashboard 
               questions={questions}
               setQuestions={setQuestions}
@@ -256,51 +188,25 @@ const App: React.FC = () => {
               onLogout={() => setGameState(GameState.SETUP)}
               onStartRound={handleAdminStartRound}
           />
-        );
-      }
+      );
 
-      if (gameState === GameState.GAME_OVER && team) {
-        return (
-          <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors pb-12">
-              <FinalStandings team={team} onRestart={handleRestart} />
-          </div>
-        );
-      }
+      if (gameState === GameState.GAME_OVER && team) return (
+          <FinalStandings team={team} onRestart={() => setGameState(GameState.SETUP)} />
+      );
 
       if (gameState === GameState.PLAYING && team && currentQuestion) {
-          if (showLeaderboard) {
-            return (
-              <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col justify-center pb-12">
-                  <Leaderboard currentRound={currentQuestion.roundNumber} />
-              </div>
-            );
-          }
+          if (showLeaderboard) return <Leaderboard currentRound={currentQuestion.roundNumber} />;
 
           return (
-            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12 select-none">
-                <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm">
-                    <div className="max-w-7xl mx-auto flex justify-between items-center">
-                        <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold border border-slate-300 dark:border-slate-600 shadow-md">
-                                {team.name.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                                <h2 className="font-bold text-slate-900 dark:text-white leading-tight">{team.name}</h2>
-                                <div className="text-xs text-slate-500 font-mono">NAV: ₹{team.balance}</div>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="hidden md:block text-right">
-                                <div className="text-xs text-slate-400 uppercase tracking-wider font-bold">Round {currentQuestion.roundNumber}</div>
-                                <div className="text-sm font-bold text-slate-700 dark:text-slate-300">Q{currentQuestion.questionNumber} / 5</div>
-                            </div>
-                            <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400">
-                                {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                            </button>
-                            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400">
-                                 {isDarkMode ? <Sun size={20}/> : <Moon size={20} />}
-                            </button>
-                        </div>
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors flex flex-col pb-12">
+                <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 sticky top-0 z-30 shadow-sm flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold">{team.name.charAt(0)}</div>
+                        <h2 className="font-bold text-slate-900 dark:text-white">{team.name} • ₹{team.balance}</h2>
+                    </div>
+                    <div className="flex gap-4 items-center">
+                        <span className="text-xs font-mono text-slate-500">R{currentQuestion.roundNumber} Q{currentQuestion.questionNumber}</span>
+                        <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400">{isDarkMode ? <Sun size={18}/> : <Moon size={18} />}</button>
                     </div>
                 </header>
 
@@ -310,21 +216,24 @@ const App: React.FC = () => {
                             question={currentQuestion}
                             allocations={allocations}
                             startBalance={startBalance}
-                            onNext={handleNextRound}
+                            onNext={() => setShowResult(false)}
                             isGameOver={team.balance === 0 || currentRoundIndex >= questions.length - 1}
                         />
                     ) : (
-                        <div className="space-y-8 animate-fade-in">
-                            <div className="bg-white dark:bg-slate-800 rounded-2xl p-8 border border-slate-200 dark:border-slate-700 shadow-xl relative overflow-hidden">
-                                 <div className="flex flex-col md:flex-row gap-8 items-start">
-                                    <div className="flex-1 space-y-6 relative z-10">
-                                        <span className="inline-block px-3 py-1 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-full text-xs font-bold uppercase tracking-wider">Market Query</span>
-                                        <h3 className="text-3xl md:text-5xl font-display font-bold text-slate-900 dark:text-white leading-tight tracking-tight">{currentQuestion.text}</h3>
-                                    </div>
-                                    <div className="flex-shrink-0">
-                                        <Timer duration={timerDuration} isActive={isTimerActive} onTimeUp={handleTimeUp} soundEnabled={soundEnabled} />
-                                    </div>
-                                 </div>
+                        <div className="space-y-8">
+                            <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-xl flex flex-col md:flex-row gap-6 items-center">
+                                <div className="flex-1">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Market Bulletin</span>
+                                    <h3 className="text-2xl md:text-4xl font-display font-bold text-slate-900 dark:text-white mt-1">{currentQuestion.text}</h3>
+                                </div>
+                                {/* Key forces Timer to remount when question/active-state changes */}
+                                <Timer 
+                                    key={`${currentRoundIndex}-${isTimerActive}`} 
+                                    duration={timerDuration} 
+                                    isActive={isTimerActive} 
+                                    onTimeUp={handleTimeUp} 
+                                    soundEnabled={soundEnabled} 
+                                />
                             </div>
                             <AllocationBoard 
                                 balance={team.balance}
@@ -347,9 +256,7 @@ const App: React.FC = () => {
   return (
       <>
         {renderContent()}
-        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 py-2 text-center text-[9px] font-mono uppercase tracking-[0.2em] z-50 border-t border-slate-800">
-            RUPEE RUMBLE • {isConnected ? 'LINKED' : 'OFFLINE'}
-        </div>
+        <div className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-500 py-1 text-[8px] font-mono text-center z-50 tracking-[0.3em]">RUPEE RUMBLE • {isConnected ? 'LINKED' : 'OFFLINE'}</div>
       </>
   );
 };
