@@ -93,26 +93,32 @@ const App: React.FC = () => {
   }, []);
 
   const handleJoin = async (newTeam: Team) => {
-    // 1. Set local state immediately for snappy UX
-    setTeam(newTeam);
-    setGameState(GameState.PLAYING);
-    setStartBalance(newTeam.balance);
-    
-    // 2. Register team in database with explicit check
-    try {
-      const { data, error } = await supabase.from('teams').upsert({
-        ...newTeam,
-        last_active: new Date().toISOString()
-      }).select();
-      
-      if (error) {
-        console.error("Sync Critical Error:", error.message);
-        throw error;
+    // Return the promise so EntryScreen can show a loading state
+    return new Promise<void>(async (resolve, reject) => {
+      try {
+        const { error } = await supabase.from('teams').upsert({
+          ...newTeam,
+          last_active: new Date().toISOString()
+        });
+        
+        if (error) {
+          console.error("Supabase Join Error:", error.message);
+          alert("Failed to join exchange: " + error.message);
+          reject(error);
+          return;
+        }
+
+        // Only transition locally after confirming the database received the team
+        setTeam(newTeam);
+        setGameState(GameState.PLAYING);
+        setStartBalance(newTeam.balance);
+        resolve();
+      } catch (err: any) {
+        console.warn("Could not register team in central database.", err.message);
+        // Fallback for demo if needed, but here we want robustness
+        reject(err);
       }
-      console.log("Team successfully registered on exchange:", data);
-    } catch (err: any) {
-      console.warn("Could not register team in central database, continuing in local mode...", err.message);
-    }
+    });
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
