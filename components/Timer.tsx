@@ -19,7 +19,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
   }, [onTimeUp]);
 
   useEffect(() => {
-    // Clear any existing timer
+    // Stop and clear any existing ticking
     if (timerRef.current) clearInterval(timerRef.current);
 
     if (!isActive) {
@@ -27,8 +27,8 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
       return;
     }
 
-    // Timer is active - start ticking
-    console.log("Timer Component: Received START signal");
+    // Timer is active: Start the clock
+    console.log("Timer component: Starting countdown");
     setTimeLeft(duration);
     if (soundEnabled) playSound('start');
 
@@ -60,11 +60,11 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
 
   return (
     <div className="relative flex items-center justify-center w-24 h-24 md:w-32 md:h-32 shrink-0 group">
-      <div className={`absolute inset-0 rounded-full border-2 transition-all duration-300 ${isUrgent ? 'border-red-600 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'border-indigo-500/30'}`} />
+      <div className={`absolute inset-0 rounded-full border-2 transition-all duration-300 ${isUrgent && isActive ? 'border-red-600 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'border-indigo-500/30'}`} />
       
       <div className="flex flex-col items-center z-10">
-          <TimerIcon className={`w-4 h-4 mb-1 transition-colors ${isUrgent ? 'text-red-500 animate-pulse' : 'text-indigo-400'}`} />
-          <span className={`text-3xl font-bold font-mono transition-colors ${isUrgent ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
+          <TimerIcon className={`w-4 h-4 mb-1 transition-colors ${isUrgent && isActive ? 'text-red-500 animate-pulse' : 'text-indigo-400'}`} />
+          <span className={`text-3xl font-bold font-mono transition-colors ${isUrgent && isActive ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
               {timeLeft}
           </span>
       </div>
@@ -76,7 +76,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
            strokeDasharray="289"
            strokeDashoffset={289 - (289 * progress) / 100}
            strokeLinecap="round"
-           className={`transition-all duration-1000 ease-linear ${isUrgent ? 'text-red-600' : 'text-indigo-500'}`}
+           className={`transition-all duration-1000 ease-linear ${isUrgent && isActive ? 'text-red-600' : 'text-indigo-500'}`}
          />
       </svg>
     </div>
