@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
@@ -38,16 +39,16 @@ const App: React.FC = () => {
     stateRef.current = { team, allocations, currentRoundIndex, questions };
   }, [team, allocations, currentRoundIndex, questions]);
 
+  // Fix: Strictly follow Gemini API initialization guidelines and use the .text property correctly
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
-    const apiKey = process.env.API_KEY;
-    if (!apiKey) return;
-    
     try {
-      const ai = new GoogleGenAI({ apiKey });
+      // Re-initialize for each call to ensure the session uses the latest context/API key as per guidelines
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence for a high-stakes trading game.`,
       });
+      // The text response is accessed via the .text property
       setMarketCommentary(response.text || "");
     } catch (e) {
       console.error("AI Commentary failed:", e);
