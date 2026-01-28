@@ -43,11 +43,11 @@ const App: React.FC = () => {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Host a trading game called Rupee Rumble. Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. Give a snappy 1-sentence market host reaction.`,
+        contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence.`,
       });
       setMarketCommentary(response.text || "");
     } catch (e) {
-      console.error("AI Commentary failed", e);
+      console.error(e);
     }
   };
 
@@ -69,7 +69,7 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Non-blocking sync to DB
+    // Sync to Supabase
     supabase.from('teams').upsert(updatedTeam).then();
     
     if (soundEnabled) {
@@ -85,6 +85,16 @@ const App: React.FC = () => {
     setIsTimerActive(false);
     handleRoundEnd();
   }, []);
+
+  const handleJoin = async (newTeam: Team) => {
+    setTeam(newTeam);
+    setGameState(GameState.PLAYING);
+    setStartBalance(newTeam.balance);
+    
+    // CRITICAL: Immediately sync to Supabase so the leaderboard sees the team
+    const { error } = await supabase.from('teams').upsert(newTeam);
+    if (error) console.error("Error syncing team on join:", error);
+  };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
     const idx = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === qNum);
@@ -112,17 +122,16 @@ const App: React.FC = () => {
             setShowLeaderboard(data.show_leaderboard);
             setTimerDuration(data.timer_duration || 40);
         }
-        setIsAppLoading(false);
       } catch (err) {
-        console.error("Initialization Error:", err);
-        setInitError("Market connectivity issues. Please refresh the page.");
+        setInitError("Connectivity issues.");
+      } finally {
         setIsAppLoading(false);
       }
     };
 
     initApp();
 
-    const channel = supabase.channel('primary-game-channel')
+    const channel = supabase.channel('room-primary')
         .on('postgres_changes', { 
             event: 'UPDATE', 
             schema: 'public', 
@@ -130,7 +139,6 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
-            console.log("Realtime Update Received:", newState);
             
             setCurrentRoundIndex(prev => {
                 if (newState.current_round_index !== prev) {
@@ -147,9 +155,7 @@ const App: React.FC = () => {
             setShowLeaderboard(!!newState.show_leaderboard);
             if (newState.timer_duration) setTimerDuration(newState.timer_duration);
         })
-        .subscribe((status) => {
-          setIsConnected(status === 'SUBSCRIBED');
-        });
+        .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
     return () => { supabase.removeChannel(channel); };
   }, [questions.length]);
@@ -162,7 +168,7 @@ const App: React.FC = () => {
   if (isAppLoading) return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
       <Loader2 className="animate-spin h-10 w-10 text-indigo-500 mb-4" />
-      <p className="text-slate-500 font-mono text-[10px] uppercase tracking-widest">Entering The Exchange...</p>
+      <p className="text-slate-500 font-mono text-xs">MARKET OPENING...</p>
     </div>
   );
 
@@ -170,23 +176,19 @@ const App: React.FC = () => {
     <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 p-6 text-center">
       <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
       <h2 className="text-xl font-bold mb-4 text-white">{initError}</h2>
-      <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-8 py-3 rounded-xl shadow-lg">Retry Connection</button>
+      <button onClick={() => window.location.reload()} className="bg-indigo-600 text-white px-8 py-3 rounded-xl">Retry</button>
     </div>
   );
 
-  if (gameState === GameState.SETUP) return <EntryScreen onJoin={(t) => { setTeam(t); setGameState(GameState.PLAYING); setStartBalance(t.balance); }} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />;
+  if (gameState === GameState.SETUP) return <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />;
   if (gameState === GameState.ADMIN_DASHBOARD) return <AdminDashboard questions={questions} setQuestions={setQuestions} timerDuration={timerDuration} setTimerDuration={setTimerDuration} onLogout={() => setGameState(GameState.SETUP)} onStartRound={handleAdminStartRound} />;
 
   const currentQuestion = questions[currentRoundIndex];
 
-  // Fallback if team joins but round hasn't started
   if (!team || !currentQuestion) {
       return (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
-          <div className="p-10 text-center space-y-4">
-              <Loader2 className="animate-spin h-8 w-8 text-indigo-500 mx-auto" />
-              <p className="text-slate-500 font-mono text-sm uppercase">Waiting for the Host to open the market...</p>
-          </div>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900">
+          <p className="text-slate-500">Wait for the Host to launch a round...</p>
         </div>
       );
   }
@@ -201,9 +203,9 @@ const App: React.FC = () => {
                 <h2 className="font-bold text-slate-900 dark:text-white truncate max-w-[120px]">₹{team.balance}</h2>
             </div>
             <div className="flex gap-1 items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`}></div>
-                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
-                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
+                <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
             </div>
         </header>
 
@@ -217,7 +219,7 @@ const App: React.FC = () => {
                 <div className="space-y-6">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl flex flex-col md:flex-row gap-6 items-center">
                         <div className="flex-1">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Live Trading Round</span>
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Live Trade</span>
                             <h3 className="text-xl md:text-3xl font-display font-bold text-slate-900 dark:text-white mt-1 leading-tight">{currentQuestion.text}</h3>
                         </div>
                         <Timer key={`${currentRoundIndex}-${isTimerActive}`} duration={timerDuration} isActive={isTimerActive} onTimeUp={handleTimeUp} soundEnabled={soundEnabled} />
