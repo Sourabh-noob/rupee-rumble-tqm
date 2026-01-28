@@ -39,16 +39,13 @@ const App: React.FC = () => {
     stateRef.current = { team, allocations, currentRoundIndex, questions };
   }, [team, allocations, currentRoundIndex, questions]);
 
-  // Fix: Strictly follow Gemini API initialization guidelines and use the .text property correctly
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
     try {
-      // Re-initialize for each call to ensure the session uses the latest context/API key as per guidelines
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Host reaction: Team "${currTeam.name}" finished Round ${currQ.roundNumber} with ₹${currTeam.balance}. The answer was ${currQ.correctAnswer}. One snappy sentence for a high-stakes trading game.`,
       });
-      // The text response is accessed via the .text property
       setMarketCommentary(response.text || "");
     } catch (e) {
       console.error("AI Commentary failed:", e);
@@ -74,7 +71,10 @@ const App: React.FC = () => {
     setTeam(updatedTeam);
     
     // Non-blocking sync to Supabase
-    supabase.from('teams').upsert(updatedTeam).then(({ error }) => {
+    supabase.from('teams').upsert({
+      ...updatedTeam,
+      last_active: new Date().toISOString()
+    }).then(({ error }) => {
       if (error) console.error("Leaderboard sync failed:", error.message);
     });
     
@@ -93,15 +93,25 @@ const App: React.FC = () => {
   }, []);
 
   const handleJoin = async (newTeam: Team) => {
+    // 1. Set local state immediately for snappy UX
     setTeam(newTeam);
     setGameState(GameState.PLAYING);
     setStartBalance(newTeam.balance);
     
-    // Register team in database immediately
+    // 2. Register team in database with explicit check
     try {
-      await supabase.from('teams').upsert(newTeam);
-    } catch (err) {
-      console.warn("Could not register team in central database, continuing locally...");
+      const { data, error } = await supabase.from('teams').upsert({
+        ...newTeam,
+        last_active: new Date().toISOString()
+      }).select();
+      
+      if (error) {
+        console.error("Sync Critical Error:", error.message);
+        throw error;
+      }
+      console.log("Team successfully registered on exchange:", data);
+    } catch (err: any) {
+      console.warn("Could not register team in central database, continuing in local mode...", err.message);
     }
   };
 
@@ -120,12 +130,10 @@ const App: React.FC = () => {
   useEffect(() => {
     const initApp = async () => {
       try {
-        // 1. Load questions (this is essential and local)
         const qs = await generateGameQuestions();
         if (!qs || qs.length === 0) throw new Error("Question bank is empty.");
         setQuestions(qs);
         
-        // 2. Fetch remote game state
         const { data, error } = await supabase
           .from('game_state')
           .select('*')
@@ -151,7 +159,6 @@ const App: React.FC = () => {
 
     initApp();
 
-    // Setup Realtime Channel
     const channel = supabase.channel('room-1')
         .on('postgres_changes', { 
             event: 'UPDATE', 
@@ -214,11 +221,9 @@ const App: React.FC = () => {
     </div>
   );
 
-  // High Priority Screens
   if (gameState === GameState.SETUP) return <EntryScreen onJoin={handleJoin} onAdminLogin={() => setGameState(GameState.ADMIN_DASHBOARD)} />;
   if (gameState === GameState.ADMIN_DASHBOARD) return <AdminDashboard questions={questions} setQuestions={setQuestions} timerDuration={timerDuration} setTimerDuration={setTimerDuration} onLogout={() => setGameState(GameState.SETUP)} onStartRound={handleAdminStartRound} />;
 
-  // Post-Join Logic
   const currentQuestion = questions[currentRoundIndex];
 
   if (showLeaderboard) return <Leaderboard currentRound={currentQuestion?.roundNumber || 1} />;

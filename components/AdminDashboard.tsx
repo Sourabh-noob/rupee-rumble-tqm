@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Question } from '../types';
-import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio } from 'lucide-react';
+import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle } from 'lucide-react';
 import { supabase, GAME_STATE_ID } from '../services/supabaseService';
 
 interface AdminDashboardProps {
@@ -29,6 +29,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [isLeaderboardVisible, setIsLeaderboardVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   useEffect(() => {
     const fetchLeaderboardStatus = async () => {
@@ -56,9 +57,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsLeaderboardVisible(newVal);
   };
 
+  const handleResetSession = async () => {
+    setSyncing(true);
+    try {
+      // Clear all teams from the database
+      const { error } = await supabase.from('teams').delete().neq('id', '0'); // Delete all rows
+      if (error) throw error;
+      
+      // Also reset game state to round 1 index 0
+      await supabase.from('game_state').update({ 
+        current_round_index: 0, 
+        is_timer_active: false,
+        show_result: false,
+        show_leaderboard: false
+      }).eq('id', GAME_STATE_ID);
+      
+      alert("Session Reset: All team data has been wiped for a new round.");
+      setShowResetConfirm(false);
+    } catch (err: any) {
+      alert("Reset failed: " + err.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const forceRefresh = async () => {
     setSyncing(true);
-    // Ping supabase to ensure connection
     await supabase.from('game_state').select('id').eq('id', GAME_STATE_ID);
     setTimeout(() => setSyncing(false), 800);
   };
@@ -254,6 +278,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               >
                                   {isLeaderboardVisible ? <><EyeOff size={14} /> HIDE RANKINGS</> : <><Eye size={14} /> SHOW RANKINGS</>}
                               </button>
+
+                              <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                                {showResetConfirm ? (
+                                  <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-500/50 space-y-3">
+                                    <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold text-[10px] uppercase">
+                                      <AlertTriangle size={14} /> Critical Action
+                                    </div>
+                                    <p className="text-[9px] text-red-800 dark:text-red-300">This will wipe all team rankings and entrants for a new session.</p>
+                                    <div className="flex gap-2">
+                                      <button onClick={handleResetSession} className="flex-1 bg-red-600 text-white text-[9px] font-black py-2 rounded-lg hover:bg-red-700 transition-colors">WIPE ALL</button>
+                                      <button onClick={() => setShowResetConfirm(false)} className="flex-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-[9px] font-black py-2 rounded-lg">CANCEL</button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button 
+                                      onClick={() => setShowResetConfirm(true)} 
+                                      className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] bg-red-100/50 dark:bg-red-900/10 text-red-600 hover:bg-red-600 hover:text-white transition-all transform active:scale-95"
+                                  >
+                                      <Trash2 size={14} /> RESET ALL ENTRANTS
+                                  </button>
+                                )}
+                              </div>
                             </div>
                         </div>
 
