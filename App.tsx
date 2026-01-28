@@ -290,7 +290,7 @@ const App: React.FC = () => {
             )}
         </main>
         <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
-          Rupee Rumble Digital Exchange • Secure Protocol v3.5 • All Trades Final
+          Rupee Rumble • THE QUIZMASTERS • By Sourabh
         </footer>
     </div>
   );
