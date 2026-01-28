@@ -1,38 +1,34 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { Question, ImageSize } from "../types";
 
-// Initialize Gemini Client
-const apiKey = process.env.API_KEY;
-let ai: GoogleGenAI | null = null;
-
-if (apiKey && apiKey.length > 0) {
-  try {
-    ai = new GoogleGenAI({ apiKey });
-  } catch (e) {
-    console.error("Failed to initialize Gemini client", e);
-  }
-}
-
+// Standard logo generation service using Google GenAI SDK
 export const generateTeamLogo = async (teamName: string, size: ImageSize): Promise<string> => {
-  if (!ai) return `https://picsum.photos/500/500?grayscale&blur=2`;
-
   try {
+    // Always use new GoogleGenAI({ apiKey: process.env.API_KEY }) as per instructions.
+    // Assuming process.env.API_KEY is pre-configured and valid.
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    // Using gemini-2.5-flash-image for standard image generation tasks as per guidelines
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
+      model: 'gemini-2.5-flash-image',
       contents: {
         parts: [{
             text: `A high-quality, professional e-sports or trading team logo for a team named "${teamName}". Style: Vector art, minimalist, financial, aggressive, bold colors. On a dark background.`
         }],
       },
       config: {
-        imageConfig: { aspectRatio: "1:1", imageSize: size },
+        imageConfig: { aspectRatio: "1:1" },
       },
     });
 
+    // Iterate through response parts to locate the generated image data
     for (const part of response.candidates?.[0]?.content?.parts || []) {
-      if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+      if (part.inlineData) {
+        return `data:image/png;base64,${part.inlineData.data}`;
+      }
     }
-    throw new Error("No image data found");
+    throw new Error("No image data found in response");
   } catch (error) {
     console.error("Error generating logo:", error);
     return `https://picsum.photos/500/500?grayscale&blur=2`;
@@ -287,6 +283,7 @@ const get2025WrappedQuestions = (): Question[] => {
             questionNumber: 4,
             text: "In early 2025, which major European nation held a 'Snap Election' following the collapse of its 'Traffic Light' coalition?",
             options: { A: "France", B: "Germany", C: "Italy", D: "Netherlands" },
+            // Removed 'resource' property as it is not part of the Question type definition
             correctAnswer: 'B'
         },
         {
