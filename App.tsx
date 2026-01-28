@@ -8,16 +8,16 @@ import FinalStandings from './components/FinalStandings';
 import AdminDashboard from './components/AdminDashboard';
 import Leaderboard from './components/Leaderboard';
 import Timer from './components/Timer';
-import { generateGameQuestions } from './services/geminiService';
+import { INITIAL_QUESTIONS } from './services/geminiService';
 import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseService';
-import { Sun, Moon, Volume2, VolumeX, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert } from 'lucide-react';
 import { playSound } from './utils/sound';
 import { GoogleGenAI } from "@google/genai";
 
 const App: React.FC = () => {
-  // 1. Initialize with local questions immediately to prevent white screen
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [isAppLoading, setIsAppLoading] = useState(true);
+  // Start with static questions immediately
+  const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
+  const [isAppLoading, setIsAppLoading] = useState(false); // No longer blocks first render
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -105,29 +105,18 @@ const App: React.FC = () => {
   };
 
   const handleJoin = async (newTeam: Team) => {
-    try {
-      const { error } = await supabase.from('teams').upsert({
-        id: newTeam.id,
-        name: newTeam.name,
-        members: newTeam.members,
-        balance: newTeam.balance,
-        history: newTeam.history
-      });
-      
-      if (error) {
-        alert("Database Sync Error: Please tell the Director to run the SQL fix in the 'Setup' tab of the console.");
-      }
+    // Optimistic UI: join team locally first, sync in background
+    setTeam(newTeam);
+    setGameState(GameState.PLAYING);
+    setStartBalance(newTeam.balance);
 
-      setTeam(newTeam);
-      setGameState(GameState.PLAYING);
-      setStartBalance(newTeam.balance);
-    } catch (err: any) {
-      console.error("Join error:", err);
-      // Fallback to local join if DB fails
-      setTeam(newTeam);
-      setGameState(GameState.PLAYING);
-      setStartBalance(newTeam.balance);
-    }
+    supabase.from('teams').upsert({
+      id: newTeam.id,
+      name: newTeam.name,
+      members: newTeam.members,
+      balance: newTeam.balance,
+      history: newTeam.history
+    }).catch(err => console.error("Background sync failed:", err));
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
@@ -142,21 +131,20 @@ const App: React.FC = () => {
     }
   };
 
-  // INITIALIZATION EFFECT - Non-blocking
+  // INITIALIZATION EFFECT - Highly Parallelized
   useEffect(() => {
-    const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 3000);
+    const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 5000);
 
     const initApp = async () => {
       try {
-        // Step 1: Immediately load local questions so user sees a screen
-        const localQs = await generateGameQuestions();
-        setQuestions(localQs);
-        setIsAppLoading(false); // Hide loader as soon as local data is ready
+        // Parallelized fetching for faster boot
+        const [qsResult, stateResult] = await Promise.allSettled([
+          supabase.from('questions').select('*'),
+          supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle()
+        ]);
 
-        // Step 2: Background sync with Supabase
-        const { data: dbQs } = await supabase.from('questions').select('*');
-        if (dbQs && dbQs.length > 0) {
-          setQuestions(dbQs.map(q => ({
+        if (qsResult.status === 'fulfilled' && qsResult.value.data && qsResult.value.data.length > 0) {
+          setQuestions(qsResult.value.data.map(q => ({
             id: q.id,
             roundNumber: q.round_number,
             questionNumber: q.question_number,
@@ -166,8 +154,8 @@ const App: React.FC = () => {
           })));
         }
         
-        const { data: stateData } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
-        if (stateData) {
+        if (stateResult.status === 'fulfilled' && stateResult.value.data) {
+            const stateData = stateResult.value.data;
             setCurrentRoundIndex(stateData.current_round_index || 0);
             setIsTimerActive(!!stateData.is_timer_active);
             setShowResult(!!stateData.show_result);
@@ -175,14 +163,12 @@ const App: React.FC = () => {
             setTimerDuration(stateData.timer_duration || 40);
         }
       } catch (err) {
-        console.warn("Supabase not ready, using local data.");
-        setIsAppLoading(false);
+        console.warn("Supabase background sync failed, using static data.");
       }
     };
 
     initApp();
 
-    // Subscribe to state updates
     const channel = supabase.channel('global-updates')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `id=eq.${GAME_STATE_ID}` }, (payload) => {
             const newState = payload.new as RemoteGameState;
@@ -225,7 +211,6 @@ const App: React.FC = () => {
           <div className="absolute inset-0 blur-xl bg-indigo-500/20 animate-pulse"></div>
       </div>
       <p className="text-slate-500 font-mono text-[10px] uppercase tracking-[0.3em]">Connecting to Exchange...</p>
-      
       {showEmergencyLink && (
         <button 
           onClick={() => { setIsAppLoading(false); setGameState(GameState.ADMIN_DASHBOARD); }}
@@ -305,7 +290,7 @@ const App: React.FC = () => {
             )}
         </main>
         <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
-          Rupee Rumble Digital Exchange • Secure Protocol v3.0 • All Trades Final
+          Rupee Rumble Digital Exchange • Secure Protocol v3.5 • All Trades Final
         </footer>
     </div>
   );
