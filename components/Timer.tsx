@@ -12,48 +12,52 @@ interface TimerProps {
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnabled }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
   const onTimeUpRef = useRef(onTimeUp);
+  const activeRef = useRef(isActive);
 
-  // Update ref so interval always has latest callback
+  // Keep refs up to date for the interval
   useEffect(() => {
     onTimeUpRef.current = onTimeUp;
-  }, [onTimeUp]);
+    activeRef.current = isActive;
+  }, [onTimeUp, isActive]);
 
   // Main Timer Logic
   useEffect(() => {
-    // If timer is not active, keep it at full duration
+    // Reset timer to full whenever it is NOT active
     if (!isActive) {
       setTimeLeft(duration);
       return;
     }
 
-    // Play start sound once when becoming active
+    console.log("Timer Component: Ticking Started at", duration);
     if (soundEnabled) playSound('start');
 
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
-        const next = prev - 1;
-        
-        if (next <= 0) {
+        if (prev <= 1) {
           clearInterval(interval);
-          if (soundEnabled) playSound('end');
-          onTimeUpRef.current(); // Trigger completion
+          if (activeRef.current) {
+            console.log("Timer Component: Time Expired");
+            if (soundEnabled) playSound('end');
+            onTimeUpRef.current();
+          }
           return 0;
         }
 
-        // Periodic sounds
+        const next = prev - 1;
         if (soundEnabled) {
           if (next <= 10) playSound('urgent');
           else playSound('heartbeat');
         }
-
         return next;
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      console.log("Timer Component: Ticking Stopped");
+      clearInterval(interval);
+    };
   }, [isActive, duration, soundEnabled]);
 
-  // Visual urgency helpers
   const isUrgent = timeLeft <= 10;
   const isCritical = timeLeft <= 5;
   const progress = (timeLeft / duration) * 100;

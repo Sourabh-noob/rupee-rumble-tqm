@@ -13,4 +13,5 @@ export interface RemoteGameState {
     is_timer_active: boolean;
     show_result: boolean;
     show_leaderboard: boolean;
+    timer_duration: number;
 }

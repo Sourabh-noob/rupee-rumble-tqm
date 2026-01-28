@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
 import AllocationBoard from './components/AllocationBoard';
@@ -20,6 +20,7 @@ const App: React.FC = () => {
     }
     return true;
   });
+  
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [timerDuration, setTimerDuration] = useState(40);
@@ -34,6 +35,19 @@ const App: React.FC = () => {
   const [startBalance, setStartBalance] = useState(1000);
   const [isAppLoading, setIsAppLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+
+  // Use refs for values needed in the time-up callback to avoid stale closures
+  const allocationsRef = useRef(allocations);
+  const teamRef = useRef(team);
+  const currentRoundIndexRef = useRef(currentRoundIndex);
+  const questionsRef = useRef(questions);
+
+  useEffect(() => {
+    allocationsRef.current = allocations;
+    teamRef.current = team;
+    currentRoundIndexRef.current = currentRoundIndex;
+    questionsRef.current = questions;
+  }, [allocations, team, currentRoundIndex, questions]);
 
   useEffect(() => {
     generateGameQuestions()
@@ -52,14 +66,17 @@ const App: React.FC = () => {
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
+  // Realtime Connection
   useEffect(() => {
     const fetchInitialState = async () => {
         const { data, error } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle(); 
         if (data && !error) {
+            console.log("Initial Supabase State:", data);
             setCurrentRoundIndex(data.current_round_index);
             setIsTimerActive(data.is_timer_active);
             setShowResult(data.show_result);
             setShowLeaderboard(data.show_leaderboard);
+            setTimerDuration(data.timer_duration || 40);
         }
     };
     fetchInitialState();
@@ -72,6 +89,8 @@ const App: React.FC = () => {
             filter: `id=eq.${GAME_STATE_ID}` 
         }, (payload) => {
             const newState = payload.new as RemoteGameState;
+            console.log("Supabase Realtime Update Received:", newState);
+            
             setCurrentRoundIndex(prev => {
                 if (newState.current_round_index !== prev) {
                     setAllocations({ A: 0, B: 0, C: 0, D: 0 });
@@ -82,8 +101,12 @@ const App: React.FC = () => {
             setIsTimerActive(newState.is_timer_active);
             setShowResult(newState.show_result);
             setShowLeaderboard(newState.show_leaderboard);
+            if (newState.timer_duration) setTimerDuration(newState.timer_duration);
         })
-        .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
+        .subscribe((status) => {
+            console.log("Supabase Subscription Status:", status);
+            setIsConnected(status === 'SUBSCRIBED');
+        });
 
     return () => { supabase.removeChannel(channel); };
   }, []);
@@ -107,9 +130,9 @@ const App: React.FC = () => {
   };
 
   const handleAdminStartRound = async (roundNum: number, questionNum: number) => {
+    console.log(`Admin starting Round ${roundNum} Q${questionNum}`);
     const index = questions.findIndex(q => q.roundNumber === roundNum && q.questionNumber === questionNum);
     if (index !== -1) {
-        // Atomic update to prevent missing state changes
         await supabase.from('game_state').update({
             current_round_index: index,
             is_timer_active: true,
@@ -119,36 +142,45 @@ const App: React.FC = () => {
     }
   };
 
-  const handleManualSubmit = () => setHasSubmitted(true);
-
-  const handleTimeUp = useCallback(() => {
-    if (!isTimerActive) return;
-    setHasSubmitted(true);
-    setIsTimerActive(false);
-    handleRoundEnd();
-  }, [isTimerActive]);
-
   const handleRoundEnd = async () => {
-    if (!team || !questions[currentRoundIndex]) return;
-    const currentQ = questions[currentRoundIndex];
-    const keptAmount = allocations[currentQ.correctAnswer];
-    const updatedHistory = [...team.history, {
+    const currentTeam = teamRef.current;
+    const currentIdx = currentRoundIndexRef.current;
+    const currentQs = questionsRef.current;
+    const currentAlloc = allocationsRef.current;
+
+    if (!currentTeam || !currentQs[currentIdx]) return;
+    
+    const currentQ = currentQs[currentIdx];
+    const keptAmount = currentAlloc[currentQ.correctAnswer];
+    
+    const updatedHistory = [...currentTeam.history, {
         roundNumber: currentQ.roundNumber,
         questionNumber: currentQ.questionNumber,
-        startBalance: team.balance,
-        allocations: allocations,
+        startBalance: currentTeam.balance,
+        allocations: { ...currentAlloc },
         correctAnswer: currentQ.correctAnswer,
         endBalance: keptAmount
     }];
-    const updatedTeam = { ...team, balance: keptAmount, history: updatedHistory };
+    
+    const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     await syncTeamToDatabase(updatedTeam);
+    
     if (soundEnabled) {
-        if (keptAmount >= team.balance && team.balance > 0) playSound('profit'); 
+        if (keptAmount >= currentTeam.balance && currentTeam.balance > 0) playSound('profit'); 
         else playSound('loss'); 
     }
     setShowResult(true);
   };
+
+  const handleManualSubmit = () => setHasSubmitted(true);
+
+  const handleTimeUp = useCallback(() => {
+    console.log("Handle Time Up Triggered Locally");
+    setHasSubmitted(true);
+    setIsTimerActive(false);
+    handleRoundEnd();
+  }, [soundEnabled]);
 
   const currentQuestion = questions[currentRoundIndex];
 
@@ -226,7 +258,7 @@ const App: React.FC = () => {
                                     <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">Market Bulletin</span>
                                     <h3 className="text-2xl md:text-4xl font-display font-bold text-slate-900 dark:text-white mt-1">{currentQuestion.text}</h3>
                                 </div>
-                                {/* Key forces Timer to remount when question/active-state changes */}
+                                {/* Key ensures Timer re-mounts on state transition */}
                                 <Timer 
                                     key={`${currentRoundIndex}-${isTimerActive}`} 
                                     duration={timerDuration} 
