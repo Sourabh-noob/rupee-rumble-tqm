@@ -34,18 +34,29 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const sqlSchema = `-- RUN THIS IN YOUR SUPABASE SQL EDITOR TO FIX SCHEMA ERRORS
--- This ensures all required tables (teams, game_state, questions) exist.
+  const sqlSchema = `-- COMPREHENSIVE FIX FOR RUPEE RUMBLE SCHEMA
+-- Run this in your Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
 
-CREATE TABLE IF NOT EXISTS teams (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  members TEXT,
-  balance NUMERIC DEFAULT 1000,
-  history JSONB DEFAULT '[]'::jsonb,
-  last_active TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+-- 1. Ensure 'teams' table has all required columns
+CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY);
 
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='name') THEN
+        ALTER TABLE teams ADD COLUMN name TEXT NOT NULL DEFAULT 'Unnamed Team';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='members') THEN
+        ALTER TABLE teams ADD COLUMN members TEXT DEFAULT '';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='balance') THEN
+        ALTER TABLE teams ADD COLUMN balance NUMERIC DEFAULT 1000;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='history') THEN
+        ALTER TABLE teams ADD COLUMN history JSONB DEFAULT '[]'::jsonb;
+    END IF;
+END $$;
+
+-- 2. Ensure 'game_state' table
 CREATE TABLE IF NOT EXISTS game_state (
   id BIGINT PRIMARY KEY,
   current_round_index INT DEFAULT 0,
@@ -55,6 +66,7 @@ CREATE TABLE IF NOT EXISTS game_state (
   timer_duration INT DEFAULT 40
 );
 
+-- 3. Ensure 'questions' table
 CREATE TABLE IF NOT EXISTS questions (
   id TEXT PRIMARY KEY,
   round_number INT NOT NULL,
@@ -64,7 +76,7 @@ CREATE TABLE IF NOT EXISTS questions (
   correct_answer TEXT NOT NULL
 );
 
--- Ensure the initial game state exists
+-- 4. Seed initial state
 INSERT INTO game_state (id, current_round_index, is_timer_active, show_result, show_leaderboard, timer_duration)
 VALUES (1, 0, false, false, false, 40)
 ON CONFLICT (id) DO NOTHING;`;
@@ -145,7 +157,6 @@ ON CONFLICT (id) DO NOTHING;`;
     setIsSaving(true);
     setSaveMessage('');
     try {
-      // Map local state to database schema
       const dbPayload = localQuestions.map(q => ({
         id: q.id,
         round_number: q.roundNumber,
@@ -164,7 +175,7 @@ ON CONFLICT (id) DO NOTHING;`;
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (err: any) {
       console.error("Save error:", err);
-      alert("Failed to sync questions: " + err.message + "\n\nTip: Ensure you ran the SQL in the Setup tab to create the 'questions' table.");
+      alert("Failed to sync questions: " + err.message + "\n\nTip: Run the updated SQL in the Setup tab.");
     } finally {
       setIsSaving(false);
     }
@@ -220,7 +231,7 @@ ON CONFLICT (id) DO NOTHING;`;
                    <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
                       <Database className="text-rose-500" /> Database Synchronization
                    </h2>
-                   <p className="text-sm text-slate-500 max-w-2xl">If you are seeing "column not found" errors or the Editor fails to save, your Supabase table schema needs to be updated. Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
+                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard. This version fixes missing columns in existing tables.</p>
                 </div>
                 
                 <div className="relative group">
@@ -346,12 +357,6 @@ ON CONFLICT (id) DO NOTHING;`;
                         </div>
                      </div>
                    ))}
-                   {registeredTeams.length === 0 && (
-                     <div className="col-span-full py-20 text-center space-y-4">
-                        <Users size={48} className="mx-auto text-slate-300" />
-                        <p className="text-slate-500 font-bold">No teams registered yet. Tell players to join via the landing page.</p>
-                     </div>
-                   )}
                 </div>
              </div>
           </div>

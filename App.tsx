@@ -70,7 +70,6 @@ const App: React.FC = () => {
     const updatedTeam = { ...currentTeam, balance: keptAmount, history: updatedHistory };
     setTeam(updatedTeam);
     
-    // Sync to Supabase
     supabase.from('teams').upsert({
       id: updatedTeam.id,
       name: updatedTeam.name,
@@ -107,10 +106,14 @@ const App: React.FC = () => {
         });
         
         if (error) {
+          console.error("Supabase Error:", error);
           if (error.message.includes("column") || error.message.includes("cache")) {
-             alert(`DATABASE SCHEMA ERROR: The column "${error.message.split('"')[1]}" could not be found. 
+             alert(`DATABASE ERROR: The column is missing from the "teams" table.
              
-Please log in as Director and go to the "Setup" tab to fix your Supabase tables.`);
+1. Log in as Director.
+2. Go to the "Setup" tab.
+3. Run the SQL script provided there.
+4. If it still fails, go to Supabase Settings -> API and click "Reload PostgREST Schema".`);
           } else {
              alert("Failed to join exchange: " + error.message);
           }
@@ -144,13 +147,9 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
   useEffect(() => {
     const initApp = async () => {
       try {
-        // 1. Try to fetch questions from Supabase first
         const { data: dbQs, error: qError } = await supabase.from('questions').select('*');
-        
         let finalQs: Question[] = [];
-        
         if (dbQs && dbQs.length > 0) {
-          // Map DB format to local interface
           finalQs = dbQs.map(q => ({
             id: q.id,
             roundNumber: q.round_number,
@@ -159,13 +158,8 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
             options: q.options,
             correctAnswer: q.correct_answer
           }));
-          console.log("Loaded questions from database.");
         } else {
-          // 2. Fallback to hardcoded questions if DB is empty or fails
-          console.warn("No questions found in database. Using local defaults.");
           finalQs = await generateGameQuestions();
-          
-          // Optionally seed the database if it's the first run (silent)
           if (!qError) {
              const seed = finalQs.map(q => ({
                 id: q.id,
@@ -178,10 +172,8 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
              supabase.from('questions').upsert(seed).then();
           }
         }
-        
         setQuestions(finalQs);
         
-        // 3. Load Remote Game State
         const { data: stateData } = await supabase
           .from('game_state')
           .select('*')
@@ -232,9 +224,7 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
             if (newState.show_leaderboard !== undefined) setShowLeaderboard(!!newState.show_leaderboard);
             if (newState.timer_duration !== undefined) setTimerDuration(newState.timer_duration);
         })
-        .subscribe((status) => {
-          setIsConnected(status === 'SUBSCRIBED');
-        });
+        .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
@@ -242,7 +232,6 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
   }, []);
 
   useEffect(() => {
-    if (isDarkMode) document.documentElement.classList.add('class'); // ensure tailwind mode
     if (isDarkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
@@ -290,7 +279,7 @@ Please log in as Director and go to the "Setup" tab to fix your Supabase tables.
                 </div>
             </div>
             <div className="flex gap-2 items-center">
-                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]' : 'bg-red-500 animate-pulse'}`}></div>
+                <div className={`w-2 h-2 rounded-full mr-2 ${isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
                 <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{soundEnabled ? <Volume2 size={16}/> : <VolumeX size={16}/>}</button>
                 <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 text-slate-400 hover:text-indigo-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-lg">{isDarkMode ? <Sun size={16}/> : <Moon size={16} />}</button>
             </div>
