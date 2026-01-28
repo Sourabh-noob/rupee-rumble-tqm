@@ -12,54 +12,59 @@ interface TimerProps {
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnabled }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
   const onTimeUpRef = useRef(onTimeUp);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     onTimeUpRef.current = onTimeUp;
   }, [onTimeUp]);
 
   useEffect(() => {
+    // Clear any existing timer
+    if (timerRef.current) clearInterval(timerRef.current);
+
     if (!isActive) {
       setTimeLeft(duration);
       return;
     }
 
+    // Timer is active - start ticking
+    console.log("Timer Component: Received START signal");
+    setTimeLeft(duration);
     if (soundEnabled) playSound('start');
 
-    const interval = setInterval(() => {
+    timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          clearInterval(interval);
+          if (timerRef.current) clearInterval(timerRef.current);
           if (soundEnabled) playSound('end');
           onTimeUpRef.current();
           return 0;
         }
+        
         const next = prev - 1;
         if (soundEnabled) {
           if (next <= 10) playSound('urgent');
-          else playSound('heartbeat');
+          else if (next % 2 === 0) playSound('heartbeat');
         }
         return next;
       });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [isActive, duration, soundEnabled]);
 
   const progress = (timeLeft / duration) * 100;
   const isUrgent = timeLeft <= 10;
 
   return (
-    <div className="relative flex items-center justify-center w-24 h-24 md:w-32 md:h-32 shrink-0">
-      <style>{`
-        @keyframes heartbeat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
-        .animate-heartbeat { animation: heartbeat 1s ease-in-out infinite; }
-      `}</style>
-      
-      <div className={`absolute inset-0 rounded-full border-4 transition-colors ${isUrgent ? 'border-red-600 animate-heartbeat' : 'border-indigo-500'}`} />
+    <div className="relative flex items-center justify-center w-24 h-24 md:w-32 md:h-32 shrink-0 group">
+      <div className={`absolute inset-0 rounded-full border-2 transition-all duration-300 ${isUrgent ? 'border-red-600 scale-105 shadow-[0_0_20px_rgba(220,38,38,0.4)]' : 'border-indigo-500/30'}`} />
       
       <div className="flex flex-col items-center z-10">
-          <TimerIcon className={`w-4 h-4 md:w-6 md:h-6 mb-1 ${isUrgent ? 'text-red-500' : 'text-indigo-400'}`} />
-          <span className={`text-2xl md:text-3xl font-bold font-mono ${isUrgent ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
+          <TimerIcon className={`w-4 h-4 mb-1 transition-colors ${isUrgent ? 'text-red-500 animate-pulse' : 'text-indigo-400'}`} />
+          <span className={`text-3xl font-bold font-mono transition-colors ${isUrgent ? 'text-red-500' : 'text-slate-900 dark:text-white'}`}>
               {timeLeft}
           </span>
       </div>
@@ -71,7 +76,7 @@ const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnable
            strokeDasharray="289"
            strokeDashoffset={289 - (289 * progress) / 100}
            strokeLinecap="round"
-           className={`transition-all duration-1000 ease-linear ${isUrgent ? 'text-red-600' : 'text-indigo-600'}`}
+           className={`transition-all duration-1000 ease-linear ${isUrgent ? 'text-red-600' : 'text-indigo-500'}`}
          />
       </svg>
     </div>
