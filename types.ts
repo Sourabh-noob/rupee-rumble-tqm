@@ -1,3 +1,4 @@
+
 export type ImageSize = '1K' | '2K' | '4K';
 
 export interface Team {
@@ -40,8 +41,9 @@ export interface RoundResult {
 }
 
 export enum GameState {
-  SETUP = 'SETUP', // Initial screen to name the 6 teams
-  ADMIN_DASHBOARD = 'ADMIN_DASHBOARD', // Rounds Manager & Live Control
-  PLAYING = 'PLAYING', // The Team Grid Screen
+  SETUP = 'SETUP', 
+  ADMIN_DASHBOARD = 'ADMIN_DASHBOARD', 
+  PLAYING = 'PLAYING', 
+  LEADERBOARD = 'LEADERBOARD',
   GAME_OVER = 'GAME_OVER',
 }

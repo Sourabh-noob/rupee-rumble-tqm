@@ -12,4 +12,5 @@ export interface RemoteGameState {
     current_round_index: number;
     is_timer_active: boolean;
     show_result: boolean;
+    show_leaderboard: boolean;
 }
