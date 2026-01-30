@@ -12,7 +12,8 @@ interface TimerProps {
 const Timer: React.FC<TimerProps> = ({ duration, onTimeUp, isActive, soundEnabled }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
   const onTimeUpRef = useRef(onTimeUp);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Fix: Use ReturnType<typeof setInterval> instead of NodeJS.Timeout to avoid namespace errors in browser environments
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     onTimeUpRef.current = onTimeUp;

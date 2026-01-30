@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Team } from '../types';
 import { Users, Briefcase, Lock, LogIn, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+import { ShootingStars } from './ui/ShootingStars';
 
 interface EntryScreenProps {
   onJoin: (team: Team) => void;
@@ -48,8 +49,12 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
   };
 
   return (
-    <div className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 w-full transition-colors duration-300">
-      <div className="w-full max-w-md space-y-8">
+    <div className="flex-1 flex items-center justify-center p-4 bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 w-full transition-colors duration-300 relative overflow-hidden">
+      
+      {/* Background Effect */}
+      <ShootingStars starColor="#eab308" trailColor="#6366f1" minDelay={800} maxDelay={3000} />
+
+      <div className="w-full max-w-md space-y-8 relative z-10">
         <div className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl p-8 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-2xl transition-colors">
             <div className="text-center mb-8">
             <h1 className="text-4xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-yellow-600 dark:from-amber-200 dark:to-yellow-500 mb-2">
