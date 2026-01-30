@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Question, Team } from '../types';
-import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check, Edit3, Hourglass } from 'lucide-react';
+import { Save, LogOut, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, Settings2, RefreshCw, Trash2, Database, Copy, Check, Hourglass, PlusCircle } from 'lucide-react';
 import { supabase, GAME_STATE_ID } from '../services/supabaseService';
 
 interface AdminDashboardProps {
@@ -23,7 +23,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'editor' | 'live' | 'roster' | 'setup'>('live');
   const [selectedRound, setSelectedRound] = useState(1);
-  const [localQuestions, setLocalQuestions] = useState<Question[]>(JSON.parse(JSON.stringify(questions)));
+  const [localQuestions, setLocalQuestions] = useState<Question[]>([]);
   const [saveMessage, setSaveMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [liveRound, setLiveRound] = useState(1);
@@ -34,9 +34,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
   const [copied, setCopied] = useState(false);
   
-  // State for controlling local timer input before committing to DB
   const [localTimerValue, setLocalTimerValue] = useState(timerDuration);
   const [isUpdatingTimer, setIsUpdatingTimer] = useState(false);
+
+  // Sync localQuestions when the prop changes
+  useEffect(() => {
+    setLocalQuestions(JSON.parse(JSON.stringify(questions)));
+  }, [questions]);
 
   const sqlSchema = `-- COMPREHENSIVE FIX FOR RUPEE RUMBLE SCHEMA + SECURITY HARDENING
 -- Run this in your Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
@@ -81,10 +85,7 @@ DROP POLICY IF EXISTS "Public access to game_state" ON game_state;
 DROP POLICY IF EXISTS "Public access to questions" ON questions;
 
 -- 4. ADD HARDENED POLICIES
--- Teams: Anyone can see and create/update teams (Anon Key access)
 CREATE POLICY "Public access to teams" ON teams FOR ALL USING (true) WITH CHECK (true);
-
--- Game State: Public can READ, but only Service Role/Authenticated can WRITE
 CREATE POLICY "Public read game_state" ON game_state FOR SELECT USING (true);
 CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
 
@@ -125,7 +126,6 @@ ON CONFLICT (id) DO NOTHING;`;
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Update local timer state when prop changes from outside (e.g. from real-time sync)
   useEffect(() => {
     setLocalTimerValue(timerDuration);
   }, [timerDuration]);
@@ -151,7 +151,7 @@ ON CONFLICT (id) DO NOTHING;`;
       setTimerDuration(val);
     } catch (err: any) {
       alert("Failed to update timer: " + err.message);
-      setLocalTimerValue(timerDuration); // Reset to last known good value
+      setLocalTimerValue(timerDuration);
     } finally {
       setIsUpdatingTimer(false);
     }
@@ -187,10 +187,36 @@ ON CONFLICT (id) DO NOTHING;`;
     }));
   };
 
+  const handleAddQuestion = () => {
+    const roundQs = localQuestions.filter(q => q.roundNumber === selectedRound);
+    const nextNum = roundQs.length > 0 ? Math.max(...roundQs.map(q => q.questionNumber)) + 1 : 1;
+    const newId = `new-${selectedRound}-${nextNum}-${Date.now()}`;
+    
+    const newQ: Question = {
+      id: newId,
+      roundNumber: selectedRound,
+      questionNumber: nextNum,
+      text: 'New Question Prompt...',
+      options: { A: 'Option 1', B: 'Option 2', C: 'Option 3', D: 'Option 4' },
+      correctAnswer: 'A'
+    };
+    
+    setLocalQuestions(prev => [...prev, newQ]);
+  };
+
+  const handleDeleteQuestion = (id: string) => {
+    if (!window.confirm("Delete this question from the bank?")) return;
+    setLocalQuestions(prev => prev.filter(q => q.id !== id));
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setSaveMessage('');
     try {
+      // 1. Delete existing questions to ensure clean slate if any were deleted
+      await supabase.from('questions').delete().neq('id', 'internal-placeholder');
+      
+      // 2. Prepare payload
       const dbPayload = localQuestions.map(q => ({
         id: q.id,
         round_number: q.roundNumber,
@@ -200,6 +226,7 @@ ON CONFLICT (id) DO NOTHING;`;
         correct_answer: q.correctAnswer
       }));
 
+      // 3. Upsert new batch
       const { error } = await supabase.from('questions').upsert(dbPayload);
       
       if (error) throw error;
@@ -215,7 +242,9 @@ ON CONFLICT (id) DO NOTHING;`;
     }
   };
 
-  const roundQuestions = localQuestions.filter(q => q.roundNumber === selectedRound).sort((a,b) => a.questionNumber - b.questionNumber);
+  const currentRoundQs = localQuestions
+    .filter(q => q.roundNumber === selectedRound)
+    .sort((a, b) => a.questionNumber - b.questionNumber);
 
   if (isLoading) {
     return (
@@ -265,7 +294,7 @@ ON CONFLICT (id) DO NOTHING;`;
                    <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
                       <Database className="text-rose-500" /> Database Synchronization
                    </h2>
-                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard. This version fixes missing columns and enables Row Level Security.</p>
+                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
                 </div>
                 
                 <div className="relative group">
@@ -312,8 +341,16 @@ ON CONFLICT (id) DO NOTHING;`;
             
             <div className="flex-1 overflow-y-auto p-8 bg-slate-50 dark:bg-slate-950">
                <div className="max-w-4xl mx-auto space-y-8 pb-20">
-                 {roundQuestions.map(q => (
-                   <div key={q.id} className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6">
+                 {currentRoundQs.map(q => (
+                   <div key={q.id} className="bg-white dark:bg-slate-900 p-8 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-xl space-y-6 relative group/card">
+                      <button 
+                        onClick={() => handleDeleteQuestion(q.id)}
+                        className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover/card:opacity-100"
+                        title="Delete Question"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+
                       <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/40 rounded-xl flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black">
@@ -353,19 +390,24 @@ ON CONFLICT (id) DO NOTHING;`;
                              <div className="flex justify-between items-center px-1">
                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Option {opt}</label>
                              </div>
-                             <div className="flex items-center gap-2">
-                               <input 
-                                  type="text" 
-                                  value={q.options[opt]} 
-                                  onChange={(e) => handleQuestionChange(q.id, 'options', e.target.value, opt)}
-                                  className={`w-full bg-slate-50 dark:bg-slate-800/50 border rounded-xl p-3 text-[11px] font-bold focus:outline-none transition-all ${q.correctAnswer === opt ? 'border-green-500 ring-1 ring-green-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500'}`}
-                                />
-                             </div>
+                             <input 
+                                type="text" 
+                                value={q.options[opt]} 
+                                onChange={(e) => handleQuestionChange(q.id, 'options', e.target.value, opt)}
+                                className={`w-full bg-slate-50 dark:bg-slate-800/50 border rounded-xl p-3 text-[11px] font-bold focus:outline-none transition-all ${q.correctAnswer === opt ? 'border-green-500 ring-1 ring-green-500' : 'border-slate-200 dark:border-slate-700 focus:border-indigo-500'}`}
+                              />
                           </div>
                         ))}
                       </div>
                    </div>
                  ))}
+
+                 <button 
+                   onClick={handleAddQuestion}
+                   className="w-full flex items-center justify-center gap-3 py-6 rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-slate-400 hover:text-indigo-500 hover:border-indigo-500/50 transition-all font-black text-xs uppercase tracking-widest bg-white dark:bg-slate-900/50"
+                 >
+                   <PlusCircle size={20} /> Add Question to Round {selectedRound}
+                 </button>
                </div>
             </div>
           </div>
@@ -416,31 +458,36 @@ ON CONFLICT (id) DO NOTHING;`;
                 <div className="flex-1 overflow-hidden flex flex-col xl:flex-row p-6 gap-6">
                     <div className="flex-1 overflow-y-auto space-y-4">
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {[1, 2, 3, 4, 5].map(qNum => {
-                              const q = questions.find(q => q.roundNumber === liveRound && q.questionNumber === qNum);
-                              return (
-                                  <div key={qNum} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between">
-                                      <div>
-                                        <div className="flex items-center justify-between mb-3">
-                                          <div className="flex items-center gap-2">
-                                            <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-sm">{qNum}</div>
-                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phase {qNum}</span>
-                                          </div>
-                                          <span className="w-6 h-6 rounded bg-green-500 text-white text-[9px] font-black flex items-center justify-center shadow-sm">{q?.correctAnswer}</span>
+                          {localQuestions
+                            .filter(q => q.roundNumber === liveRound)
+                            .sort((a,b) => a.questionNumber - b.questionNumber)
+                            .map(q => (
+                                <div key={q.id} className="group bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between">
+                                    <div>
+                                      <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                          <div className="w-8 h-8 bg-indigo-50 dark:bg-indigo-900/40 rounded-lg flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-black text-sm">{q.questionNumber}</div>
+                                          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Phase {q.questionNumber}</span>
                                         </div>
-                                        <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 mb-5 h-8 leading-tight">{q?.text || "..."}</p>
+                                        <span className="w-6 h-6 rounded bg-green-500 text-white text-[9px] font-black flex items-center justify-center shadow-sm">{q.correctAnswer}</span>
                                       </div>
-                                      <button onClick={() => onStartRound(liveRound, qNum)} className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-500 text-white font-black py-2.5 rounded-xl text-[10px] transition-all transform active:scale-95 shadow-lg">
-                                          <PlayCircle size={14} /> LAUNCH PHASE
-                                      </button>
-                                  </div>
-                              );
-                          })}
+                                      <p className="text-[11px] font-bold text-slate-800 dark:text-slate-100 line-clamp-2 mb-5 h-8 leading-tight">{q.text}</p>
+                                    </div>
+                                    <button onClick={() => onStartRound(liveRound, q.questionNumber)} className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-indigo-600 hover:bg-indigo-500 text-white font-black py-2.5 rounded-xl text-[10px] transition-all transform active:scale-95 shadow-lg">
+                                        <PlayCircle size={14} /> LAUNCH PHASE
+                                    </button>
+                                </div>
+                            ))
+                          }
+                          {localQuestions.filter(q => q.roundNumber === liveRound).length === 0 && (
+                            <div className="col-span-full py-20 text-center text-slate-400 font-mono text-xs uppercase tracking-widest">
+                              No questions in this round. Add them in the Editor.
+                            </div>
+                          )}
                       </div>
                     </div>
 
                     <div className="w-full xl:w-72 space-y-4">
-                        {/* Live Controls Card */}
                         <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
                             <div>
                                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -476,7 +523,6 @@ ON CONFLICT (id) DO NOTHING;`;
                                     {isUpdatingTimer ? <Loader2 size={12} className="animate-spin" /> : <Clock size={12} />}
                                     Sync Limit
                                   </button>
-                                  <p className="text-[8px] text-slate-400 font-mono italic">Changes affect subsequent questions immediately.</p>
                                 </div>
                             </div>
 
