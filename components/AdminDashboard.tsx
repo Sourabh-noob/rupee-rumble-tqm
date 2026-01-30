@@ -34,49 +34,57 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const sqlSchema = `-- COMPREHENSIVE FIX FOR RUPEE RUMBLE SCHEMA
+  const sqlSchema = `-- COMPREHENSIVE FIX FOR RUPEE RUMBLE SCHEMA + SECURITY HARDENING
 -- Run this in your Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
 
--- 1. Ensure 'teams' table has all required columns
+-- 1. Create tables if they don't exist
 CREATE TABLE IF NOT EXISTS teams (id TEXT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS game_state (id BIGINT PRIMARY KEY);
+CREATE TABLE IF NOT EXISTS questions (id TEXT PRIMARY KEY);
 
+-- 2. Ensure columns exist with correct types
 DO $$ 
 BEGIN 
-    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='name') THEN
-        ALTER TABLE teams ADD COLUMN name TEXT NOT NULL DEFAULT 'Unnamed Team';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='members') THEN
-        ALTER TABLE teams ADD COLUMN members TEXT DEFAULT '';
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='balance') THEN
-        ALTER TABLE teams ADD COLUMN balance NUMERIC DEFAULT 1000;
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='history') THEN
-        ALTER TABLE teams ADD COLUMN history JSONB DEFAULT '[]'::jsonb;
-    END IF;
+    -- teams
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='name') THEN ALTER TABLE teams ADD COLUMN name TEXT NOT NULL DEFAULT 'Unnamed'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='members') THEN ALTER TABLE teams ADD COLUMN members TEXT DEFAULT ''; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='balance') THEN ALTER TABLE teams ADD COLUMN balance NUMERIC DEFAULT 1000; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='teams' AND COLUMN_NAME='history') THEN ALTER TABLE teams ADD COLUMN history JSONB DEFAULT '[]'::jsonb; END IF;
+
+    -- game_state
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='game_state' AND COLUMN_NAME='current_round_index') THEN ALTER TABLE game_state ADD COLUMN current_round_index INT DEFAULT 0; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='game_state' AND COLUMN_NAME='is_timer_active') THEN ALTER TABLE game_state ADD COLUMN is_timer_active BOOLEAN DEFAULT FALSE; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='game_state' AND COLUMN_NAME='show_result') THEN ALTER TABLE game_state ADD COLUMN show_result BOOLEAN DEFAULT FALSE; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='game_state' AND COLUMN_NAME='show_leaderboard') THEN ALTER TABLE game_state ADD COLUMN show_leaderboard BOOLEAN DEFAULT FALSE; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='game_state' AND COLUMN_NAME='timer_duration') THEN ALTER TABLE game_state ADD COLUMN timer_duration INT DEFAULT 40; END IF;
+
+    -- questions
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='questions' AND COLUMN_NAME='round_number') THEN ALTER TABLE questions ADD COLUMN round_number INT; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='questions' AND COLUMN_NAME='question_number') THEN ALTER TABLE questions ADD COLUMN question_number INT; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='questions' AND COLUMN_NAME='text') THEN ALTER TABLE questions ADD COLUMN text TEXT; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='questions' AND COLUMN_NAME='options') THEN ALTER TABLE questions ADD COLUMN options JSONB; END IF;
+    IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME='questions' AND COLUMN_NAME='correct_answer') THEN ALTER TABLE questions ADD COLUMN correct_answer TEXT; END IF;
 END $$;
 
--- 2. Ensure 'game_state' table
-CREATE TABLE IF NOT EXISTS game_state (
-  id BIGINT PRIMARY KEY,
-  current_round_index INT DEFAULT 0,
-  is_timer_active BOOLEAN DEFAULT FALSE,
-  show_result BOOLEAN DEFAULT FALSE,
-  show_leaderboard BOOLEAN DEFAULT FALSE,
-  timer_duration INT DEFAULT 40
-);
+-- 3. ENABLE SECURITY (RLS)
+ALTER TABLE teams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE game_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
 
--- 3. Ensure 'questions' table
-CREATE TABLE IF NOT EXISTS questions (
-  id TEXT PRIMARY KEY,
-  round_number INT NOT NULL,
-  question_number INT NOT NULL,
-  text TEXT NOT NULL,
-  options JSONB NOT NULL,
-  correct_answer TEXT NOT NULL
-);
+-- DROP OLD POLICIES TO AVOID DUPLICATES
+DROP POLICY IF EXISTS "Public access to teams" ON teams;
+DROP POLICY IF EXISTS "Public access to game_state" ON game_state;
+DROP POLICY IF EXISTS "Public access to questions" ON questions;
 
--- 4. Seed initial state
+-- 4. ADD HARDENED POLICIES
+-- Teams: Anyone can see and create/update teams (Anon Key access)
+CREATE POLICY "Public access to teams" ON teams FOR ALL USING (true) WITH CHECK (true);
+
+-- Game State: Public can READ, but only Service Role/Authenticated can WRITE
+CREATE POLICY "Public read game_state" ON game_state FOR SELECT USING (true);
+CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
+
+-- 5. Seed initial state
 INSERT INTO game_state (id, current_round_index, is_timer_active, show_result, show_leaderboard, timer_duration)
 VALUES (1, 0, false, false, false, 40)
 ON CONFLICT (id) DO NOTHING;`;
@@ -175,7 +183,7 @@ ON CONFLICT (id) DO NOTHING;`;
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (err: any) {
       console.error("Save error:", err);
-      alert("Failed to sync questions: " + err.message + "\n\nTip: Run the updated SQL in the Setup tab.");
+      alert("Failed to sync questions: " + err.message);
     } finally {
       setIsSaving(false);
     }
@@ -231,7 +239,7 @@ ON CONFLICT (id) DO NOTHING;`;
                    <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
                       <Database className="text-rose-500" /> Database Synchronization
                    </h2>
-                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard. This version fixes missing columns in existing tables.</p>
+                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard. This version fixes missing columns and enables Row Level Security.</p>
                 </div>
                 
                 <div className="relative group">

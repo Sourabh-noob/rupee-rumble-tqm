@@ -10,15 +10,15 @@ import Leaderboard from './components/Leaderboard';
 import Timer from './components/Timer';
 import { INITIAL_QUESTIONS } from './services/geminiService';
 import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseService';
-import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert, AlertCircle } from 'lucide-react';
 import { playSound } from './utils/sound';
 import { GoogleGenAI } from "@google/genai";
-import { Analytics } from '@vercel/analytics/react';
+import { globalRateLimiter, LIMIT_CONFIGS } from './utils/rateLimiter';
 
 const App: React.FC = () => {
   // Start with static questions immediately
   const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
-  const [isAppLoading, setIsAppLoading] = useState(false); // No longer blocks first render
+  const [isAppLoading, setIsAppLoading] = useState(false);
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -34,6 +34,7 @@ const App: React.FC = () => {
   const [startBalance, setStartBalance] = useState(1000);
   const [marketCommentary, setMarketCommentary] = useState<string>("");
   const [showEmergencyLink, setShowEmergencyLink] = useState(false);
+  const [rateLimitMessage, setRateLimitMessage] = useState<string | null>(null);
 
   const stateRef = useRef({ team, allocations, currentRoundIndex, questions });
   
@@ -44,6 +45,11 @@ const App: React.FC = () => {
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
     try {
       if (!process.env.API_KEY) return;
+      
+      // Rate Limit AI Commentary
+      const check = globalRateLimiter.check('ai_comm', 5, 60000);
+      if (!check.allowed) return;
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -59,6 +65,14 @@ const App: React.FC = () => {
     const { team: currentTeam, currentRoundIndex: idx, questions: currentQs, allocations: currentAlloc } = stateRef.current;
     if (!currentTeam || !currentQs[idx]) return;
     
+    // Rate limit manual settle
+    const check = globalRateLimiter.check('settle', LIMIT_CONFIGS.MARKET_UPDATE.limit, LIMIT_CONFIGS.MARKET_UPDATE.interval);
+    if (!check.allowed) {
+      showRateLimitWarning(`Exchange throttled. Retrying settlement in ${Math.ceil(check.waitTime/1000)}s...`);
+      setTimeout(handleRoundEnd, check.waitTime);
+      return;
+    }
+
     const currentQ = currentQs[idx];
     const keptAmount = currentAlloc[currentQ.correctAnswer];
     const updatedHistory = [...currentTeam.history, {
@@ -91,6 +105,11 @@ const App: React.FC = () => {
     generateCommentary(updatedTeam, currentQ);
   };
 
+  const showRateLimitWarning = (msg: string) => {
+    setRateLimitMessage(msg);
+    setTimeout(() => setRateLimitMessage(null), 3000);
+  };
+
   const handleTimeUp = useCallback(() => {
     setHasSubmitted(true);
     setIsTimerActive(false);
@@ -106,18 +125,28 @@ const App: React.FC = () => {
   };
 
   const handleJoin = async (newTeam: Team) => {
-    // Optimistic UI: join team locally first, sync in background
+    // Rate Limit Joins
+    const check = globalRateLimiter.check('join', LIMIT_CONFIGS.DATABASE_JOIN.limit, LIMIT_CONFIGS.DATABASE_JOIN.interval);
+    if (!check.allowed) {
+      showRateLimitWarning(`Too many registration attempts. Wait ${Math.ceil(check.waitTime/1000)}s.`);
+      return;
+    }
+
     setTeam(newTeam);
     setGameState(GameState.PLAYING);
     setStartBalance(newTeam.balance);
 
+    // FIX: PostgrestFilterBuilder (from .upsert) does not have a .catch method. 
+    // Use .then and check the 'error' property instead.
     supabase.from('teams').upsert({
       id: newTeam.id,
       name: newTeam.name,
       members: newTeam.members,
       balance: newTeam.balance,
       history: newTeam.history
-    }).catch(err => console.error("Background sync failed:", err));
+    }).then(({ error }) => {
+      if (error) console.error("Background sync failed:", error.message);
+    });
   };
 
   const handleAdminStartRound = async (roundNum: number, qNum: number) => {
@@ -132,13 +161,11 @@ const App: React.FC = () => {
     }
   };
 
-  // INITIALIZATION EFFECT - Highly Parallelized
   useEffect(() => {
     const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 5000);
 
     const initApp = async () => {
       try {
-        // Parallelized fetching for faster boot
         const [qsResult, stateResult] = await Promise.allSettled([
           supabase.from('questions').select('*'),
           supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle()
@@ -164,7 +191,7 @@ const App: React.FC = () => {
             setTimerDuration(stateData.timer_duration || 40);
         }
       } catch (err) {
-        console.warn("Supabase background sync failed, using static data.");
+        console.warn("Supabase background sync failed.");
       }
     };
 
@@ -248,6 +275,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10">
+        {rateLimitMessage && (
+          <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-bounce">
+            <div className="bg-rose-600 text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest">
+              <AlertCircle size={14} /> {rateLimitMessage}
+            </div>
+          </div>
+        )}
+
         <header className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 sticky top-0 z-40 flex justify-between items-center shadow-xl">
             <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black">{team.name ? team.name.charAt(0) : '?'}</div>
@@ -293,7 +328,6 @@ const App: React.FC = () => {
         <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
           Rupee Rumble • THE QUIZMASTERS • Sourabh
         </footer>
-        <Analytics />
     </div>
   );
 };

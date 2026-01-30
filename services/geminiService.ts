@@ -1,9 +1,17 @@
 
 import { GoogleGenAI } from "@google/genai";
 import { Question, ImageSize } from "../types";
+import { globalRateLimiter, LIMIT_CONFIGS } from "../utils/rateLimiter";
 
 // Standard logo generation service using Google GenAI SDK
 export const generateTeamLogo = async (teamName: string, size: ImageSize): Promise<string> => {
+  // Rate Limit Check
+  const check = globalRateLimiter.check('ai_logo', LIMIT_CONFIGS.AI_GENERATION.limit, LIMIT_CONFIGS.AI_GENERATION.interval);
+  if (!check.allowed) {
+    console.warn(`Rate limit hit: AI Generation cooling down for ${Math.ceil(check.waitTime / 1000)}s`);
+    return `https://picsum.photos/500/500?grayscale&blur=2`;
+  }
+
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
@@ -53,7 +61,7 @@ export const INITIAL_QUESTIONS: Question[] = [
     {
         id: 'r1_q3',
         roundNumber: 1,
-        questionNumber: 3,
+        questionNumber: 2,
         text: "Which AI model series introduced 'System 2' thinking through reinforcement learning and chain-of-thought in late 2024?",
         options: { A: "Claude 3.5 Sonnet", B: "Gemini 1.5 Pro", C: "OpenAI o1 (Strawberry)", D: "Llama 4-Alpha" },
         correctAnswer: 'C'
