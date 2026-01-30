@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Question, Team } from '../types';
-import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check, Edit3 } from 'lucide-react';
+import { Save, LogOut, ChevronRight, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, LayoutGrid, MonitorPlay, Settings2, RefreshCw, Radio, Trash2, AlertTriangle, Users, Database, Copy, Check, Edit3, Hourglass } from 'lucide-react';
 import { supabase, GAME_STATE_ID } from '../services/supabaseService';
 
 interface AdminDashboardProps {
@@ -33,6 +33,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [registeredTeams, setRegisteredTeams] = useState<Team[]>([]);
   const [copied, setCopied] = useState(false);
+  
+  // State for controlling local timer input before committing to DB
+  const [localTimerValue, setLocalTimerValue] = useState(timerDuration);
+  const [isUpdatingTimer, setIsUpdatingTimer] = useState(false);
 
   const sqlSchema = `-- COMPREHENSIVE FIX FOR RUPEE RUMBLE SCHEMA + SECURITY HARDENING
 -- Run this in your Supabase SQL Editor (https://supabase.com/dashboard/project/_/sql)
@@ -98,8 +102,11 @@ ON CONFLICT (id) DO NOTHING;`;
   useEffect(() => {
     const init = async () => {
       try {
-        const { data } = await supabase.from('game_state').select('show_leaderboard').eq('id', GAME_STATE_ID).maybeSingle();
-        if (data) setIsLeaderboardVisible(data.show_leaderboard);
+        const { data } = await supabase.from('game_state').select('show_leaderboard, timer_duration').eq('id', GAME_STATE_ID).maybeSingle();
+        if (data) {
+          setIsLeaderboardVisible(data.show_leaderboard);
+          setLocalTimerValue(data.timer_duration);
+        }
         await fetchTeams();
       } catch (err) {
         console.error("Dashboard init error:", err);
@@ -118,6 +125,11 @@ ON CONFLICT (id) DO NOTHING;`;
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Update local timer state when prop changes from outside (e.g. from real-time sync)
+  useEffect(() => {
+    setLocalTimerValue(timerDuration);
+  }, [timerDuration]);
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(sqlSchema);
     setCopied(true);
@@ -129,6 +141,20 @@ ON CONFLICT (id) DO NOTHING;`;
     const { error } = await supabase.from('game_state').update({ show_leaderboard: newVal }).eq('id', GAME_STATE_ID);
     if (error) return alert(`Error: ${error.message}`);
     setIsLeaderboardVisible(newVal);
+  };
+
+  const updateGlobalTimer = async (val: number) => {
+    setIsUpdatingTimer(true);
+    try {
+      const { error } = await supabase.from('game_state').update({ timer_duration: val }).eq('id', GAME_STATE_ID);
+      if (error) throw error;
+      setTimerDuration(val);
+    } catch (err: any) {
+      alert("Failed to update timer: " + err.message);
+      setLocalTimerValue(timerDuration); // Reset to last known good value
+    } finally {
+      setIsUpdatingTimer(false);
+    }
   };
 
   const handleResetSession = async () => {
@@ -414,15 +440,47 @@ ON CONFLICT (id) DO NOTHING;`;
                     </div>
 
                     <div className="w-full xl:w-72 space-y-4">
-                        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                              <Settings2 size={12} /> Live Controls
-                            </h3>
-                            <div className="space-y-3">
-                              <button onClick={toggleLeaderboard} className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] transition-all transform active:scale-95 shadow-md ${isLeaderboardVisible ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
-                                  {isLeaderboardVisible ? <><EyeOff size={14} /> HIDE RANKINGS</> : <><Eye size={14} /> SHOW RANKINGS</>}
-                              </button>
-                              <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                        {/* Live Controls Card */}
+                        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+                            <div>
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                  <Settings2 size={12} /> Live Controls
+                                </h3>
+                                <div className="space-y-3">
+                                  <button onClick={toggleLeaderboard} className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-black text-[10px] transition-all transform active:scale-95 shadow-md ${isLeaderboardVisible ? 'bg-amber-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                      {isLeaderboardVisible ? <><EyeOff size={14} /> HIDE RANKINGS</> : <><Eye size={14} /> SHOW RANKINGS</>}
+                                  </button>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                  <Hourglass size={12} /> Market Timing
+                                </h3>
+                                <div className="space-y-3">
+                                  <div className="flex items-center gap-3">
+                                    <input 
+                                      type="number" 
+                                      value={localTimerValue}
+                                      onChange={(e) => setLocalTimerValue(parseInt(e.target.value) || 0)}
+                                      className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2 text-sm font-black text-slate-900 dark:text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all"
+                                      placeholder="Seconds..."
+                                    />
+                                    <span className="text-[10px] font-black text-slate-400 uppercase">SEC</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => updateGlobalTimer(localTimerValue)}
+                                    disabled={isUpdatingTimer || localTimerValue === timerDuration}
+                                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-black text-[10px] bg-slate-900 dark:bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 transition-all uppercase tracking-widest"
+                                  >
+                                    {isUpdatingTimer ? <Loader2 size={12} className="animate-spin" /> : <Clock size={12} />}
+                                    Sync Limit
+                                  </button>
+                                  <p className="text-[8px] text-slate-400 font-mono italic">Changes affect subsequent questions immediately.</p>
+                                </div>
+                            </div>
+
+                            <div className="pt-6 border-t border-slate-100 dark:border-slate-800">
                                 {showResetConfirm ? (
                                   <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-xl border border-red-500/50 space-y-3">
                                     <p className="text-[9px] text-red-800 dark:text-red-300 font-black">RESET EVERYTHING?</p>
@@ -436,7 +494,6 @@ ON CONFLICT (id) DO NOTHING;`;
                                       <Trash2 size={14} /> RESET SESSION
                                   </button>
                                 )}
-                              </div>
                             </div>
                         </div>
                     </div>
