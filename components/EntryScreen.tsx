@@ -60,20 +60,20 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
             <h1 className="text-4xl font-display font-bold text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-yellow-600 dark:from-amber-200 dark:to-yellow-500 mb-2">
                 RUPEE RUMBLE
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] uppercase tracking-[0.3em]">Institutional Terminal Login</p>
+            <p className="text-slate-500 dark:text-slate-400 font-mono text-[10px] uppercase tracking-[0.3em]">Participants Terminal Login</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <Briefcase size={12} /> Entity Name
+                <Briefcase size={12} /> Team Name
                 </label>
                 <input
                 type="text"
                 value={teamName}
                 onChange={(e) => setTeamName(e.target.value)}
                 className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-yellow-500 focus:outline-none transition-all focus-glow text-sm font-bold"
-                placeholder="e.g. Citadel Capital"
+                placeholder="e.g. BG Baddies"
                 required
                 disabled={isJoining}
                 />
@@ -81,7 +81,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
 
             <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                <Users size={12} /> Trading Desk Personnel
+                <Users size={12} /> Members Names
                 </label>
                 <textarea
                 value={members}
