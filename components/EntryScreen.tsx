@@ -98,7 +98,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
                 disabled={isJoining}
                 className={`w-full flex items-center justify-center gap-2 bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-white font-black py-4 rounded-xl shadow-lg shadow-amber-900/20 transform hover:-translate-y-1 transition-all active:scale-95 ${isJoining ? 'opacity-70 cursor-not-allowed' : 'hover-glow'}`}
             >
-                {isJoining ? <><Loader2 size={18} className="animate-spin" /> SECURING TERMINAL...</> : 'INITIALIZE TRADING SEAT'}
+                {isJoining ? <><Loader2 size={18} className="animate-spin" /> SECURING TERMINAL...</> : 'ENTER THE QUIZ'}
             </button>
             </form>
         </div>
@@ -108,7 +108,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
                 onClick={() => setShowAdminLogin(!showAdminLogin)}
                 className="w-full p-4 flex items-center justify-between text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 text-[10px] font-black uppercase tracking-widest transition-colors"
             >
-                <span className="flex items-center gap-2"><Lock size={12} /> Exchange Authority Access</span>
+                <span className="flex items-center gap-2"><Lock size={12} /> The Quizmaster's Access</span>
                 {showAdminLogin ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
             </button>
             
