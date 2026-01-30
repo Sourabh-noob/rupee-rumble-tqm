@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState, Team, Question, Allocations } from './types';
 import EntryScreen from './components/EntryScreen';
@@ -16,9 +15,8 @@ import { GoogleGenAI } from "@google/genai";
 import { globalRateLimiter, LIMIT_CONFIGS } from './utils/rateLimiter';
 
 const App: React.FC = () => {
-  // Start with static questions immediately
   const [questions, setQuestions] = useState<Question[]>(INITIAL_QUESTIONS);
-  const [isAppLoading, setIsAppLoading] = useState(false);
+  const [isAppLoading, setIsAppLoading] = useState(true);
   const [gameState, setGameState] = useState<GameState>(GameState.SETUP);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -46,7 +44,6 @@ const App: React.FC = () => {
     try {
       if (!process.env.API_KEY) return;
       
-      // Rate Limit AI Commentary
       const check = globalRateLimiter.check('ai_comm', 5, 60000);
       if (!check.allowed) return;
 
@@ -65,7 +62,6 @@ const App: React.FC = () => {
     const { team: currentTeam, currentRoundIndex: idx, questions: currentQs, allocations: currentAlloc } = stateRef.current;
     if (!currentTeam || !currentQs[idx]) return;
     
-    // Rate limit manual settle
     const check = globalRateLimiter.check('settle', LIMIT_CONFIGS.MARKET_UPDATE.limit, LIMIT_CONFIGS.MARKET_UPDATE.interval);
     if (!check.allowed) {
       showRateLimitWarning(`Exchange throttled. Retrying settlement in ${Math.ceil(check.waitTime/1000)}s...`);
@@ -125,7 +121,6 @@ const App: React.FC = () => {
   };
 
   const handleJoin = async (newTeam: Team) => {
-    // Rate Limit Joins
     const check = globalRateLimiter.check('join', LIMIT_CONFIGS.DATABASE_JOIN.limit, LIMIT_CONFIGS.DATABASE_JOIN.interval);
     if (!check.allowed) {
       showRateLimitWarning(`Too many registration attempts. Wait ${Math.ceil(check.waitTime/1000)}s.`);
@@ -136,8 +131,6 @@ const App: React.FC = () => {
     setGameState(GameState.PLAYING);
     setStartBalance(newTeam.balance);
 
-    // FIX: PostgrestFilterBuilder (from .upsert) does not have a .catch method. 
-    // Use .then and check the 'error' property instead.
     supabase.from('teams').upsert({
       id: newTeam.id,
       name: newTeam.name,
@@ -192,6 +185,8 @@ const App: React.FC = () => {
         }
       } catch (err) {
         console.warn("Supabase background sync failed.");
+      } finally {
+        setIsAppLoading(false);
       }
     };
 
