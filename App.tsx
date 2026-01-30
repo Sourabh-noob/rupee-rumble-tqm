@@ -154,29 +154,39 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper to fetch questions from Supabase
+  const fetchQuestions = async () => {
+    try {
+      const { data, error } = await supabase.from('questions').select('*');
+      if (error) throw error;
+      if (data && data.length > 0) {
+        const mapped = data.map(q => ({
+          id: q.id,
+          roundNumber: q.round_number,
+          questionNumber: q.question_number,
+          text: q.text,
+          options: q.options,
+          correctAnswer: q.correct_answer
+        })).sort((a, b) => {
+          if (a.roundNumber !== b.roundNumber) return a.roundNumber - b.roundNumber;
+          return a.questionNumber - b.questionNumber;
+        });
+        setQuestions(mapped);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch questions:", err);
+    }
+  };
+
   useEffect(() => {
     const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 5000);
 
     const initApp = async () => {
       try {
-        const [qsResult, stateResult] = await Promise.allSettled([
-          supabase.from('questions').select('*'),
-          supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle()
-        ]);
-
-        if (qsResult.status === 'fulfilled' && qsResult.value.data && qsResult.value.data.length > 0) {
-          setQuestions(qsResult.value.data.map(q => ({
-            id: q.id,
-            roundNumber: q.round_number,
-            questionNumber: q.question_number,
-            text: q.text,
-            options: q.options,
-            correctAnswer: q.correct_answer
-          })));
-        }
+        await fetchQuestions();
+        const { data: stateData } = await supabase.from('game_state').select('*').eq('id', GAME_STATE_ID).maybeSingle();
         
-        if (stateResult.status === 'fulfilled' && stateResult.value.data) {
-            const stateData = stateResult.value.data;
+        if (stateData) {
             setCurrentRoundIndex(stateData.current_round_index || 0);
             setIsTimerActive(!!stateData.is_timer_active);
             setShowResult(!!stateData.show_result);
@@ -192,7 +202,8 @@ const App: React.FC = () => {
 
     initApp();
 
-    const channel = supabase.channel('global-updates')
+    // Listen for Game State updates
+    const stateChannel = supabase.channel('global-state')
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_state', filter: `id=eq.${GAME_STATE_ID}` }, (payload) => {
             const newState = payload.new as RemoteGameState;
             if (!newState) return;
@@ -216,9 +227,18 @@ const App: React.FC = () => {
         })
         .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
+    // NEW: Listen for Question Bank updates in real-time
+    const questionsChannel = supabase.channel('realtime-questions')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'questions' }, () => {
+            console.log("Question bank updated in backend. Refreshing local cache...");
+            fetchQuestions();
+        })
+        .subscribe();
+
     return () => {
       clearTimeout(emergencyTimeout);
-      supabase.removeChannel(channel);
+      supabase.removeChannel(stateChannel);
+      supabase.removeChannel(questionsChannel);
     };
   }, []);
 
