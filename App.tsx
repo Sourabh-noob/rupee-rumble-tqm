@@ -13,6 +13,7 @@ import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseSer
 import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert } from 'lucide-react';
 import { playSound } from './utils/sound';
 import { GoogleGenAI } from "@google/genai";
+import { Analytics } from '@vercel/analytics/react';
 
 const App: React.FC = () => {
   // Start with static questions immediately
@@ -292,6 +293,7 @@ const App: React.FC = () => {
         <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-600 py-1.5 text-[8px] font-mono text-center z-50 tracking-[0.5em] uppercase border-t border-slate-800">
           Rupee Rumble • THE QUIZMASTERS • Sourabh
         </footer>
+        <Analytics />
     </div>
   );
 };
