@@ -4,12 +4,13 @@ import App from './App';
 
 // Global polyfill for process.env to prevent crashes on startup
 if (typeof window !== 'undefined') {
-  (window as any).process = {
-    env: {
-      API_KEY: (window as any).process?.env?.API_KEY || '',
-      SUPABASE_URL: (window as any).process?.env?.SUPABASE_URL || '',
-      SUPABASE_ANON_KEY: (window as any).process?.env?.SUPABASE_ANON_KEY || ''
-    }
+  const win = window as any;
+  win.process = win.process || {};
+  win.process.env = {
+    ...win.process.env,
+    API_KEY: win.process.env?.API_KEY || '',
+    SUPABASE_URL: win.process.env?.SUPABASE_URL || '',
+    SUPABASE_ANON_KEY: win.process.env?.SUPABASE_ANON_KEY || ''
   };
 }
 

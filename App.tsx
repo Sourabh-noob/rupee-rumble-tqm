@@ -207,6 +207,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const emergencyTimeout = setTimeout(() => setShowEmergencyLink(true), 5000);
+    const appLoadingTimeout = setTimeout(() => setIsAppLoading(false), 8000); // Fail-safe loader exit
 
     const initApp = async () => {
       try {
@@ -224,6 +225,7 @@ const App: React.FC = () => {
         console.warn("Supabase background sync failed.");
       } finally {
         setIsAppLoading(false);
+        clearTimeout(appLoadingTimeout);
       }
     };
 
@@ -254,7 +256,7 @@ const App: React.FC = () => {
         })
         .subscribe((status) => setIsConnected(status === 'SUBSCRIBED'));
 
-    // NEW: Listen for Question Bank updates in real-time
+    // Listen for Question Bank updates in real-time
     const questionsChannel = supabase.channel('realtime-questions')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'questions' }, () => {
             console.log("Question bank updated in backend. Refreshing local cache...");
@@ -264,6 +266,7 @@ const App: React.FC = () => {
 
     return () => {
       clearTimeout(emergencyTimeout);
+      clearTimeout(appLoadingTimeout);
       supabase.removeChannel(stateChannel);
       supabase.removeChannel(questionsChannel);
     };
