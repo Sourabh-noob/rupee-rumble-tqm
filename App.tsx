@@ -9,7 +9,7 @@ import Leaderboard from './components/Leaderboard';
 import Timer from './components/Timer';
 import { INITIAL_QUESTIONS } from './services/geminiService';
 import { supabase, GAME_STATE_ID, RemoteGameState } from './services/supabaseService';
-import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert, AlertCircle } from 'lucide-react';
+import { Sun, Moon, Volume2, VolumeX, Loader2, ShieldAlert, AlertCircle, ShieldBan } from 'lucide-react';
 import { playSound } from './utils/sound';
 import { GoogleGenAI } from "@google/genai";
 import { globalRateLimiter, LIMIT_CONFIGS } from './utils/rateLimiter';
@@ -39,6 +39,33 @@ const App: React.FC = () => {
   useEffect(() => {
     stateRef.current = { team, allocations, currentRoundIndex, questions };
   }, [team, allocations, currentRoundIndex, questions]);
+
+  // Anti-Cheat: Prevent Cut, Copy, Paste, and Context Menu for participants
+  useEffect(() => {
+    const handleForbiddenAction = (e: Event) => {
+      // Allow administrators full functionality
+      if (gameState === GameState.ADMIN_DASHBOARD) return;
+
+      // Restrict for participants during active game or result screens
+      if (gameState === GameState.PLAYING || gameState === GameState.GAME_OVER || (gameState === GameState.SETUP && team)) {
+        e.preventDefault();
+        showRateLimitWarning("SECURITY ALERT: Copy/Paste/Right-Click is disabled to prevent cheating.");
+        if (soundEnabled) playSound('loss'); // Play a minor "denied" sound
+      }
+    };
+
+    window.addEventListener('copy', handleForbiddenAction);
+    window.addEventListener('cut', handleForbiddenAction);
+    window.addEventListener('paste', handleForbiddenAction);
+    window.addEventListener('contextmenu', handleForbiddenAction);
+
+    return () => {
+      window.removeEventListener('copy', handleForbiddenAction);
+      window.removeEventListener('cut', handleForbiddenAction);
+      window.removeEventListener('paste', handleForbiddenAction);
+      window.removeEventListener('contextmenu', handleForbiddenAction);
+    };
+  }, [gameState, team, soundEnabled]);
 
   const generateCommentary = async (currTeam: Team, currQ: Question) => {
     try {
@@ -289,11 +316,12 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 transition-colors flex flex-col pb-10 select-none">
         {rateLimitMessage && (
           <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-bounce">
-            <div className="bg-rose-600 text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest">
-              <AlertCircle size={14} /> {rateLimitMessage}
+            <div className={`${rateLimitMessage.includes('SECURITY') ? 'bg-amber-600' : 'bg-rose-600'} text-white px-6 py-2 rounded-full shadow-2xl flex items-center gap-2 text-xs font-black uppercase tracking-widest`}>
+              {rateLimitMessage.includes('SECURITY') ? <ShieldBan size={14} /> : <AlertCircle size={14} />} 
+              {rateLimitMessage}
             </div>
           </div>
         )}
