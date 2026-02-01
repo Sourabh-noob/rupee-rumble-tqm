@@ -40,7 +40,7 @@ const EntryScreen: React.FC<EntryScreenProps> = ({ onJoin, onAdminLogin }) => {
 
   const handleAdminSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'TheQuizMasters' && password === 'TheQuizMasters') {
+    if (username === 'TheQuizMasters' && password === 'TheQuizMasters2350') {
         onAdminLogin();
         setLoginError('');
     } else {
