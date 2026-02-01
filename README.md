@@ -13,8 +13,7 @@ Survive the market volatility, protect your NAV (Net Asset Value), and climb the
 *   **Risk Management:** Go "All-In" for maximum returns or "Spread Evenly" to hedge against uncertainty.
 *   **Real-time Settlement:** Portfolios are updated instantly as soon as the market (timer) closes.
 
-### 🎙️ AI-Driven Market Commentary
-*   **Dynamic Reactions:** Integrated with **Gemini AI** to generate witty, professional, and context-aware commentary based on team performance and round results.
+### 🎙️ Audio
 *   **Procedural Audio:** Custom-synthesized sound engine for heartbeats, profit chimes, and market-close buzzers.
 
 ### 🛠️ Director Control Suite (Admin Panel)
@@ -33,7 +32,6 @@ Survive the market volatility, protect your NAV (Net Asset Value), and climb the
 -   **Frontend:** React 19 + TypeScript + Vite
 -   **Styling:** Tailwind CSS + Framer Motion (Animations)
 -   **Backend:** Supabase (PostgreSQL + Real-time WebSockets)
--   **AI Intelligence:** Gemini 2.5 Flash & 3 Pro (via `@google/genai`)
 -   **Data Vis:** Recharts (Equity curves and portfolio breakdown)
 
 ---
