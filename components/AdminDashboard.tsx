@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Question, Team } from '../types';
 import { Save, LogOut, PlayCircle, Clock, Eye, EyeOff, Loader2, Zap, Settings2, RefreshCw, Trash2, Database, Copy, Check, Hourglass, PlusCircle } from 'lucide-react';
@@ -82,12 +81,14 @@ ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
 -- DROP OLD POLICIES TO AVOID DUPLICATES
 DROP POLICY IF EXISTS "Public access to teams" ON teams;
 DROP POLICY IF EXISTS "Public access to game_state" ON game_state;
+DROP POLICY IF EXISTS "Public read game_state" ON game_state;
 DROP POLICY IF EXISTS "Public access to questions" ON questions;
+DROP POLICY IF EXISTS "Public read questions" ON questions;
 
--- 4. ADD HARDENED POLICIES
+-- 4. ADD HARDENED POLICIES (Updated to allow ALL access for Admin functionality)
 CREATE POLICY "Public access to teams" ON teams FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Public read game_state" ON game_state FOR SELECT USING (true);
-CREATE POLICY "Public read questions" ON questions FOR SELECT USING (true);
+CREATE POLICY "Public access to game_state" ON game_state FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public access to questions" ON questions FOR ALL USING (true) WITH CHECK (true);
 
 -- 5. Seed initial state
 INSERT INTO game_state (id, current_round_index, is_timer_active, show_result, show_leaderboard, timer_duration)
@@ -213,8 +214,9 @@ ON CONFLICT (id) DO NOTHING;`;
     setIsSaving(true);
     setSaveMessage('');
     try {
-      // 1. Delete existing questions to ensure clean slate if any were deleted
-      await supabase.from('questions').delete().neq('id', 'internal-placeholder');
+      // 1. Delete existing questions to ensure clean slate
+      const { error: deleteError } = await supabase.from('questions').delete().neq('id', 'internal-placeholder');
+      if (deleteError) throw deleteError;
       
       // 2. Prepare payload
       const dbPayload = localQuestions.map(q => ({
@@ -227,16 +229,17 @@ ON CONFLICT (id) DO NOTHING;`;
       }));
 
       // 3. Upsert new batch
-      const { error } = await supabase.from('questions').upsert(dbPayload);
-      
-      if (error) throw error;
+      if (dbPayload.length > 0) {
+        const { error: upsertError } = await supabase.from('questions').upsert(dbPayload);
+        if (upsertError) throw upsertError;
+      }
 
       setQuestions(localQuestions);
       setSaveMessage('Bank Updated Successfully!');
       setTimeout(() => setSaveMessage(''), 3000);
     } catch (err: any) {
       console.error("Save error:", err);
-      alert("Failed to sync questions: " + err.message);
+      alert("Failed to sync questions: " + err.message + "\n\nMake sure you have updated the SQL policies in the 'Setup' tab!");
     } finally {
       setIsSaving(false);
     }
@@ -294,7 +297,7 @@ ON CONFLICT (id) DO NOTHING;`;
                    <h2 className="text-3xl font-black tracking-tighter flex items-center gap-3">
                       <Database className="text-rose-500" /> Database Synchronization
                    </h2>
-                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard.</p>
+                   <p className="text-sm text-slate-500 max-w-2xl">Copy the SQL below and run it in the SQL Editor of your Supabase dashboard to allow the Admin panel to sync changes.</p>
                 </div>
                 
                 <div className="relative group">
